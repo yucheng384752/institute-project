@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>圖書管理系統</title>
+    {% load static %}
+    <link href="{% static 'borrow_book.css' %}" rel="stylesheet">
+</head>
+<body>
+    <h1>圖書管理系統</h1>
+    <p>現在時間: {{now}}</p>
+    
+    <form method="post">
+        {% csrf_token %}
+        <label>借書證號碼(學號)</label>
+        <input type="text", name="brorrower_number", required><br>
+
+        <label>書籍名稱</label>
+        <input type="text", name="brorrowed_book_name", required><br>
+        
+        {% if due_date %}
+        <p>此書到期日:{{ due_date }}，借閱書籍以<p class="warning">兩個月</p>為上限！</p>
+        {% endif %}
+    </form>
+    <button>確認借書</button>
+
+    
+</body>
+</html>

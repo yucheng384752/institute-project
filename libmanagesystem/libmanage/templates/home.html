@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{title}}</title>
+    {% load static %}
+    <link href="{% static 'home_page.css' %}" rel="stylesheet">
+</head>
+<body>
+    <h1>{{title}}</h1>
+    <button><a href="{% url 'login' %}">登入</a></button>
+    <button><a href="{% url 'user_home' %}">借還書紀錄</a></button>
+    <h2><a href="{% url 'book_list' %}">館藏查詢</a></h2>
+    <h2><a href="">客服諮詢</a></h2>
+    <footer>
+        <p>建工圖書館：807618高雄市三民區建工路415號 電話:07-3814526 分機:13101</p><br>
+        <p>第一圖書館：824005高雄市燕巢區大學路1號 電話:07-6011000 分機:31591、31599</p>
+        <!-- <button><a href="{% url 'book_create' %}">管理員系統</a></button> -->
+    </footer>
+
+</body>
+</html>

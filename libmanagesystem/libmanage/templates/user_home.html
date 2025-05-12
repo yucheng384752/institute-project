@@ -1,0 +1,66 @@
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title|default:"圖書管理系統" }}</title>
+    {% load static %}
+    <link href="{% static 'user_home.css' %}" rel="stylesheet">
+</head>
+<body>
+    <h1>圖書管理系統</h1>
+    <p>現在時間: {{ now }}</p>
+
+    {% if messages %}
+    <ul>
+        {% for message in messages %}
+        <li style="color: {% if message.tags == 'error' %}red{% else %}green{% endif %};">{{ message }}</li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+
+    <h2>已借閱書籍</h2>
+    {% if borrowed_books %}
+        <ul class="record">
+            {% for record in borrowed_books %}
+            <li>
+                書名：{{ record.book.title }}<br>
+                <p class="right">借閱日期：{{ record.borrow_date|date:"Y-m-d" }}</p>
+                <p class="right">歸還期限：{{ record.due_date|date:"Y-m-d" }}</p>
+                {% if record.is_overdue %}
+                    <strong style="color: red;"> (逾期)</strong>
+                {% endif %}
+                <form method="post" action="{% url 'return_book' record.id %}">
+                    {% csrf_token %}
+                    <button type="submit" class="return">歸還</button>
+                </form>
+            </li>
+            <hr>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p>目前沒有借閱書籍</p>
+    {% endif %}
+
+    {% if user %}
+        <hr>
+        <h2>{{ user.username }} 的借閱紀錄</h2>
+        <ul>
+            {% for record in all_records %}
+                <li>
+                    {{ record.book.title }} - 歸還日期：{{ now }}
+                    {% if record.is_overdue %}
+                        <strong style="color: red;"> (逾期)</strong>
+                    {% endif %}
+                    {% comment %} <a href="{% url 'return_book' record.id %}">還書</a> {% endcomment %}
+                </li>
+            {% empty %}
+                <li>沒有借閱紀錄</li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+
+    <p><a href="{% url 'logout' %}">登出</a></p>
+    <p><a href="{% url 'home' %}">回到首頁</a></p>
+
+</body>
+</html>
