@@ -6,7 +6,7 @@ from pyzbar.pyzbar import decode
 
 img = cv2.imread("barcode-detect\\20250515_215742.jpg")
 
-def putText(x, y, text, color=(0, 0, 0)):
+def putText(img, x, y, text, color=(0, 0, 0)):
     
     fontpath = "C:/Windows/Fonts/msjh.ttc"  # 微軟正黑體
     font = ImageFont.truetype(fontpath, 20)
@@ -14,6 +14,7 @@ def putText(x, y, text, color=(0, 0, 0)):
     draw = ImageDraw.Draw(img_pil)
     draw.text((x, y), text, fill=color, font=font)
     return np.array(img_pil)
+
 barcodes = decode(Image.fromarray(img))
 
 if barcodes:
@@ -35,7 +36,9 @@ if barcodes:
 
         # 顯示並儲存裁切圖片
         cv2.imshow(f'barcode_{i}', img_change)
-        cv2.imwrite(f'barcode_crop_{i}.jpg', img_change)
+        # cv2.imwrite(f'barcode_crop_{i}.jpg', img_change)    
+else:
+    print('no barcode')
     
 cv2.imshow('audio1', img_change)
 cv2.waitKey(0)
