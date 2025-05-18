@@ -44,7 +44,7 @@ def barcodescan(img):
     if not found_isbn:
         print("沒有找到有效的 ISBN 條碼")
         
-    return code
+    return code if found_isbn else None
 
 
 def crawler(ISBN):
@@ -81,5 +81,9 @@ def crawler(ISBN):
 # 圖片載入
 img_path = "barcode-detect\\20250518_161452.jpg"
 img = cv2.imread(img_path)
-ISBN = barcodescan(img)
-print(crawler(ISBN))
+if img is not None:
+    isbn = barcodescan(img)
+    book = crawler(isbn)
+    print("書籍資訊：", book)
+else:
+    print("圖片載入失敗，請確認路徑")
