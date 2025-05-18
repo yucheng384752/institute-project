@@ -1,34 +1,48 @@
 import cv2
 import numpy as np
 from PIL import ImageFont, ImageDraw, Image
-from pyzbar.pyzbar import decode
+from pyzbar.pyzbar import decode, ZBarSymbol
 from pathlib import Path
 
-#讀取圖片
-img = cv2.imread("barcode-detect\\20250515_215742.jpg")
+# 圖片載入
+img_path = "barcode-detect\\20250518_161452.jpg"
+img = cv2.imread(img_path)
 
-#前處理(灰階，去雜訊，二值化，增強對比)
-gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-blur = cv2.GaussianBlur(gray, (3, 3), 0)
-thresh = cv2.adaptiveThreshold (
-    blur, 255,
-    cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-    cv2.THRESH_BINARY, 11, 2)
-enhanced = cv2.equalizeHist(thresh)
+# 檢查 ISBN-13 是否有效
+def is_valid_isbn13(code):
+    if len(code) != 13 or not code.isdigit():
+        return False
+    total = sum((int(d) * (1 if i % 2 == 0 else 3)) for i, d in enumerate(code[:12]))
+    check = (10 - total % 10) % 10
+    return check == int(code[-1])
 
-#ZBar解碼
-barcodes =decode(Image.fromarray(enhanced))
+# 顯示中文字
+def putText(img, x, y, text, color=(0, 0, 255)):
+    fontpath = "C:/Windows/Fonts/msjh.ttc"  # 微軟正黑體
+    font = ImageFont.truetype(fontpath, 24)
+    img_pil = Image.fromarray(img)
+    draw = ImageDraw.Draw(img_pil)
+    draw.text((x, y), text, font=font, fill=color)
+    return np.array(img_pil)
 
-if barcodes:
-    for barcode in barcodes:
-        x, y, w, h = barcode.rect
-        data = barcode.data.decode('utf-8')
-        cv2.rectangle(img, (x,y), (x+w, y+h), (0,0,255), 2)
-        cv2.putText(img, data, (x, y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-        print('result:', data)
-else:
-    print('no barcode')
-    
-cv2.imshow('enhanced detection', img)
-cv2.waitKey(0)
-cv2.destroyAllWindows()
+# 條碼掃描
+barcodes = decode(Image.fromarray(img), symbols=[ZBarSymbol.EAN13])
+
+found_isbn = False
+
+for barcode in barcodes:
+    code = barcode.data.decode('utf-8')
+    x, y, w, h = barcode.rect
+
+    if is_valid_isbn13(code):
+        found_isbn = True
+
+        print("偵測到 ISBN 條碼：", code)
+        break
+    else:
+        print("無效條碼或非 ISBN：", code)
+
+if not found_isbn:
+    print("沒有找到有效的 ISBN 條碼")
+
+
