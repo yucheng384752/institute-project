@@ -2,44 +2,33 @@ import cv2
 import numpy as np
 from PIL import ImageFont, ImageDraw, Image
 from pyzbar.pyzbar import decode
+from pathlib import Path
 
-
+#讀取圖片
 img = cv2.imread("barcode-detect\\20250515_215742.jpg")
 
-def putText(img, x, y, text, color=(0, 0, 0)):
-    
-    fontpath = "C:/Windows/Fonts/msjh.ttc"  # 微軟正黑體
-    font = ImageFont.truetype(fontpath, 20)
-    img_pil = Image.fromarray(img)
-    draw = ImageDraw.Draw(img_pil)
-    draw.text((x, y), text, fill=color, font=font)
-    return np.array(img_pil)
+#前處理(灰階，去雜訊，二值化，增強對比)
+gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+blur = cv2.GaussianBlur(gray, (3, 3), 0)
+thresh = cv2.adaptiveThreshold (
+    blur, 255,
+    cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+    cv2.THRESH_BINARY, 11, 2)
+enhanced = cv2.equalizeHist(thresh)
 
-barcodes = decode(Image.fromarray(img))
+#ZBar解碼
+barcodes =decode(Image.fromarray(enhanced))
 
 if barcodes:
-    for i, barcode in enumerate(barcodes):
+    for barcode in barcodes:
         x, y, w, h = barcode.rect
         data = barcode.data.decode('utf-8')
-
-        # 防止座標超出邊界
-        x1 = max(x - w, 0)
-        y1 = max(y - h, 0)
-        x2 = min(x + 2 * w, img.shape[1])
-        y2 = min(y + 2 * h, img.shape[0])
-
-        # 裁切原圖範圍
-        img_change = img[y1:y2, x1:x2].copy()
-
-        # 將條碼編號繪製在裁切圖左上角
-        img_change = putText(img_change, 10, 10, data, color=(0, 0, 255))
-
-        # 顯示並儲存裁切圖片
-        cv2.imshow(f'barcode_{i}', img_change)
-        # cv2.imwrite(f'barcode_crop_{i}.jpg', img_change)    
+        cv2.rectangle(img, (x,y), (x+w, y+h), (0,0,255), 2)
+        cv2.putText(img, data, (x, y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+        print('result:', data)
 else:
     print('no barcode')
     
-cv2.imshow('audio1', img_change)
+cv2.imshow('enhanced detection', img)
 cv2.waitKey(0)
 cv2.destroyAllWindows()
