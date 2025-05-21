@@ -21,6 +21,7 @@ class BorrowRecord(models.Model):
     book = models.ForeignKey(Book, on_delete=models.CASCADE)
     borrow_date = models.DateField(auto_now_add=True)
     due_date = models.DateField()
+    return_date = models.DateField(null=True, blank=True)
     returned = models.BooleanField(default=False)
     
     def __str__(self):
@@ -28,4 +29,4 @@ class BorrowRecord(models.Model):
     
     @property  #檢查是否逾期
     def is_overdue(self):
-        return self.due_date < timezone.now().date() and not self.returned
+        return not self.returned and self.due_date < timezone.now().date()

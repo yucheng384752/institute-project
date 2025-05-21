@@ -172,3 +172,7 @@ def return_book(request, record_id):
     record.save()
     messages.success(request, f"{record.book.title} 已成功歸還")
     return redirect('user_home')
+
+
+#def create_book_data(request):
+#   book_name = Book.object.title()
