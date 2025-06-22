@@ -6,7 +6,7 @@ from django.contrib.auth.models import User
 
 # Create your models here.
 class Book(models.Model):
-     # 定義書籍分類的選項
+     # 定義書籍分類的選項 
    CATEGORY_CHOICES = [
         ('SCIENCE', '科學'),
         ('LANGUAGE', '語言'),

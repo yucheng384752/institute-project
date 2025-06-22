@@ -363,7 +363,7 @@ def book_detail_api(request, book_id):
 
 
 @csrf_exempt
-@require_http_methods(["POST"]) # 可以考慮使用 PUT 請求
+@require_http_methods(["POST"]) # 可以考慮使用 PUT 請求 
 def scan_code_api(request):
     try:
         data = json.loads(request.body)

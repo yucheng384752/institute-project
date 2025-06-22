@@ -27,7 +27,7 @@ const STATUS_OPTIONS = [
 
 
 // ----------------------------------------------------
-// MessageDisplay: 訊息顯示組件 (已包含 Tailwind 樣式)
+// MessageDisplay: 訊息顯示組件 (已包含 Tailwind 樣式)  
 // ----------------------------------------------------
 const MessageDisplay = ({ message, type }) => {
   if (!message) return null;
