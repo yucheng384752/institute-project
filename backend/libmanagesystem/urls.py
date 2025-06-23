@@ -40,9 +40,13 @@ urlpatterns = [
     path('api/books/borrow/<int:book_id>/', views.borrow_book_api, name='api_borrow_book'),
     path('api/books/return/<int:record_id>/', views.return_book_api, name='api_return_book'),
     path('api/scan_code/', views.scan_code_api, name='api_scan_code'), 
-    path('api/user/update_profile/', views.update_profile_api, name='api_update_profile'), # 確保這個API路徑存在 
+    path('api/user/update_profile/', views.update_profile_api, name='api_update_profile'), 
 
     # === 服務 React 應用的入口點 (index.html) ===
     re_path(r'^(?:.*)/?$', TemplateView.as_view(template_name='index.html')),
 ]
 
+# 在開發模式下服務靜態檔案
+if settings.DEBUG:
+    urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
