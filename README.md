@@ -1,7 +1,66 @@
 # libraryManageSystem
 ![homepage](https://github.com/user-attachments/assets/17979578-f4db-4e28-9938-f89dd81ca497)
 ## Install
+backend：
+> asgiref==3.8.1
+> Django==5.2.3
+> django-cors-headers==4.7.0
+> numpy==2.3.1
+> opencv-python==4.11.0.86
+> pyzbar==0.1.9
+> sqlparse==0.5.3
+> tzdata==2025.2
+> gunicorn==22.0.0
+frontend：
+```javascript
+{
+  "name": "frontend",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "@testing-library/dom": "^10.4.0",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.3.0",
+    "@testing-library/user-event": "^13.5.0",
+    "http-proxy-middleware": "^3.0.5",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-scripts": "5.0.1",
+    "web-vitals": "^2.1.4"
+  },
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject"
+  },
+  "proxy": "http://127.0.0.1:8000/", 
+  "eslintConfig": {
+    "extends": [
+      "react-app",
+      "react-app/jest"
+    ]
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  },
+  "devDependencies": {
+    "autoprefixer": "^10.4.0",
+    "postcss": "^8.4.0",
+    "tailwindcss": "^3.0.0"
+  }
+}
 
+```
 ## Usage
 
 ## Contributing
