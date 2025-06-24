@@ -36,11 +36,12 @@ urlpatterns = [
     path('api/books/delete/<int:book_id>/', views.book_delete_api, name='api_book_delete'),
     path('api/books/update/<int:book_id>/', views.update_book_api, name='api_book_update'),
     path('api/books/update_status/<int:book_id>/', views.update_book_status_api, name='api_update_book_status'),
-    path('api/books/<int:book_id>/', views.book_detail_api, name='api_book_detail'), # 獲取單本書籍的API
+    path('api/books/<str:identifier>/', views.book_detail_api, name='api_book_detail'), # 獲取單本書籍的API (支援ID或ISBN)
     path('api/books/borrow/<int:book_id>/', views.borrow_book_api, name='api_borrow_book'),
     path('api/books/return/<int:record_id>/', views.return_book_api, name='api_return_book'),
-    path('api/scan_code/', views.scan_code_api, name='api_scan_code'), 
+    # path('api/scan_code/', views.scan_code_api, name='api_scan_code'), 
     path('api/user/update_profile/', views.update_profile_api, name='api_update_profile'), 
+    path('api/books/return_by_book_and_user/', views.return_book_by_book_and_user_api, name='api_return_book_by_book_and_user'),
 
     # === 服務 React 應用的入口點 (index.html) ===
     re_path(r'^(?:.*)/?$', TemplateView.as_view(template_name='index.html')),

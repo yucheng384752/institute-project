@@ -8,6 +8,7 @@ from django.contrib.auth.hashers import make_password, check_password
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
+from django.http import Http404 # 新增 Http404 引入，用於 book_detail_api
 
 # 圖像處理和條碼辨識庫
 import cv2
@@ -106,7 +107,7 @@ def update_profile_api(request):
     except Exception as e:
         return error_response(f'更新個人資料失敗：{str(e)}', status=500)
 
-@require_http_methods(["GET"]) # 使用 GET 請求
+@require_http_methods(["GET"]) # 使用 GET 請求 
 def user_home_api(request):
     user_id = request.GET.get('user_id')
     if not user_id:
@@ -156,7 +157,7 @@ def user_home_api(request):
         'now': timezone.now().isoformat()
     }, status=200)
 
-@require_http_methods(["GET"]) # 使用 GET 請求
+@require_http_methods(["GET"]) # 使用 GET 請求 
 def book_list_api(request):
     # 從資料庫中獲取所有書籍的資訊
     books = Book.objects.all().values('id', 'title', 'author', 'isbn', 'is_borrowed', 'category', 'status')
@@ -345,9 +346,16 @@ def update_book_status_api(request, book_id):
 
 
 @require_http_methods(["GET"]) # 獲取單本書籍資訊的API
-def book_detail_api(request, book_id):
+def book_detail_api(request, identifier): # 修改：參數從 book_id 改為 identifier
     try:
-        book = get_object_or_404(Book, id=book_id)
+        # 嘗試將 identifier 轉換為整數，如果成功則按 ID 查詢
+        try:
+            book_id = int(identifier)
+            book = get_object_or_404(Book, pk=book_id)
+        except ValueError:
+            # 如果不是整數，則按 ISBN 查詢
+            book = get_object_or_404(Book, isbn=identifier)
+
         book_data = {
             'id': book.id,
             'title': book.title,
@@ -356,48 +364,89 @@ def book_detail_api(request, book_id):
             'is_borrowed': book.is_borrowed,
             'category': book.category,
             'status': book.status,
+            # 移除以下行，因為您的模型中可能不存在這些屬性
+            # 'publisher': book.publisher, 
+            # 'publication_year': book.publication_year,
+            # 'description': book.description,
         }
         return JsonResponse({'book': book_data}, status=200)
-    except Book.DoesNotExist:
+    except Book.DoesNotExist: # 處理書籍不存在的情況
         return error_response('書籍不存在', status=404)
     except Exception as e:
         return error_response(f'獲取書籍詳細信息失敗：{str(e)}', status=500)
 
-
 @csrf_exempt
-@require_http_methods(["POST"]) 
-def scan_code_api(request):
+@require_http_methods(["POST"])
+def return_book_by_book_and_user_api(request): # 新增：根據書籍ID和用戶ID歸還
     try:
         data = json.loads(request.body)
-        image_b64 = data.get('image')
-        
-        if not image_b64:
-            return error_response('未提供圖像數據', status=400)
+        book_id = data.get('book_id')
+        user_id = data.get('user_id')
 
-        img_bytes = base64.b64decode(image_b64)
-        np_arr = np.frombuffer(img_bytes, np.uint8)
-        img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+        if not book_id or not user_id:
+            return error_response('缺少書籍ID或用戶ID', status=400)
 
-        if img is None:
-            return error_response('無法解碼圖像', status=400)
+        # 找到最近一條該用戶借閱該書籍且未歸還的記錄
+        borrow_record = BorrowRecord.objects.filter(
+            book__id=book_id,
+            user__id=user_id,
+            returned=False
+        ).order_by('-borrow_date').first() # 獲取最新一條未歸還記錄
 
-        gray_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        decoded_objects = pyzbar_decode(gray_img)
+        if not borrow_record:
+            return error_response('未找到該用戶借閱此書籍的未歸還記錄', status=404)
 
-        if decoded_objects:
-            decoded_text = decoded_objects[0].data.decode('utf-8')
-            # 提取邊界框資訊
-            rect = decoded_objects[0].rect
-            bounding_box = {
-                'x': rect.left,
-                'y': rect.top,
-                'width': rect.width,
-                'height': rect.height
-            }
-            return JsonResponse({'message': '成功辨識', 'decoded_text': decoded_text, 'bounding_box': bounding_box}, status=200)
-        else:
-            return JsonResponse({'message': '未找到條碼或QR碼'}, status=200)
+        borrow_record.return_date = timezone.now()
+        borrow_record.returned = True
+        borrow_record.save()
+
+        # 更新書籍狀態為 AVAILABLE，除非原本是損壞或遺失
+        book = borrow_record.book
+        if book.status not in ['DAMAGED', 'LOST']:
+             book.status = 'AVAILABLE'
+        book.save()
+
+        return JsonResponse({'message': '書籍歸還成功'}, status=200)
+
     except json.JSONDecodeError:
-        return error_response('無效的 JSON 數據', status=400)
+        return error_response('無效的 JSON 格式', status=400)
     except Exception as e:
-        return error_response(f'掃描過程中發生錯誤：{str(e)}', status=500)
+        return error_response(f'歸還書籍失敗：{str(e)}', status=500)
+
+# @csrf_exempt
+# @require_http_methods(["POST"]) 
+# def scan_code_api(request):
+#     try:
+#         data = json.loads(request.body)
+#         image_b64 = data.get('image')
+        
+#         if not image_b64:
+#             return error_response('未提供圖像數據', status=400)
+
+#         img_bytes = base64.b64decode(image_b64)
+#         np_arr = np.frombuffer(img_bytes, np.uint8)
+#         img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+
+#         if img is None:
+#             return error_response('無法解碼圖像', status=400)
+
+#         gray_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+#         decoded_objects = pyzbar_decode(gray_img)
+
+#         if decoded_objects:
+#             decoded_text = decoded_objects[0].data.decode('utf-8')
+#             # 提取邊界框資訊
+#             rect = decoded_objects[0].rect
+#             bounding_box = {
+#                 'x': rect.left,
+#                 'y': rect.top,
+#                 'width': rect.width,
+#                 'height': rect.height
+#             }
+#             return JsonResponse({'message': '成功辨識', 'decoded_text': decoded_text, 'bounding_box': bounding_box}, status=200)
+#         else:
+#             return JsonResponse({'message': '未找到條碼或QR碼'}, status=200)
+#     except json.JSONDecodeError:
+#         return error_response('無效的 JSON 數據', status=400)
+#     except Exception as e:
+#         return error_response(f'掃描過程中發生錯誤：{str(e)}', status=500)

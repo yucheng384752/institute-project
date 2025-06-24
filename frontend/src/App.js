@@ -1,4 +1,6 @@
 import React, { useState, useEffect, createContext, useContext, useCallback, useRef } from 'react';
+import { QRCodeCanvas } from 'qrcode.react'; // 引入 QRCode.react 的具名匯出 QRCodeCanvas
+import jsQR from 'jsqr'; // 引入 jsQR 庫 (假設已正確安裝並可直接引入)
 
 // AuthContext: 用於管理全局使用者狀態
 export const AuthContext = createContext(null);
@@ -20,15 +22,14 @@ const STATUS_OPTIONS = [
   { value: 'AVAILABLE', label: '可借閱' },
   { value: 'DAMAGED', label: '已損壞' },
   { value: 'UNDER_REPAIR', label: '維修中' },
-  { value: 'LOST', label: '遺失' },
+  { value: 'LOST', 'label': '遺失' },
 ];
-
 
 // MessageDisplay: 訊息顯示組件  
 const MessageDisplay = ({ message, type }) => {
   if (!message) return null;
   return (
-    <div className={`p-3 rounded-md text-white ${type === 'success' ? 'bg-green-500' : 'bg-red-500'} mb-4 text-center shadow-sm`}>
+    <div className={`p-3 rounded-md text-white ${type === 'success' ? 'bg-green-500' : type === 'error' ? 'bg-red-500' : 'bg-blue-500'} mb-4 text-center shadow-sm`}>
       {message}
     </div>
   );
@@ -65,7 +66,7 @@ const Header = ({ setCurrentPage, currentUser, logoutUser }) => {
             館藏查詢
           </button>
           {/* 判斷如果用戶名是 'yucheng' 則顯示新增書籍按鈕 */}
-          {currentUser.id && currentUser.username === 'yucheng' && (
+          {currentUser && currentUser.id && currentUser.username === 'yucheng' && (
             <button
               onClick={() => handleNavLinkClick('book_create')}
               className="px-4 py-2 rounded-md hover:bg-blue-600 transition duration-200"
@@ -81,7 +82,7 @@ const Header = ({ setCurrentPage, currentUser, logoutUser }) => {
             快速掃描
           </button>
 
-          {currentUser.id ? (
+          {currentUser && currentUser.id ? (
             <div className="relative">
               <button
                 onClick={handleDropdownToggle}
@@ -168,6 +169,7 @@ const Login = ({ setCurrentPage }) => {
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState(null);
   const [messageType, setMessageType] = useState('');
+  const messageTimeoutRef = useRef(null); // 新增 useRef
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -185,11 +187,18 @@ const Login = ({ setCurrentPage }) => {
       const data = await response.json();
 
       if (response.ok) {
-        setMessage(data.message);
-        setMessageType('success');
-        loginUser(data.user_id, data.username);
-        setCurrentPage('user_home');
+        setMessage(data.message); // 設定訊息
+        setMessageType('success'); // 設定訊息類型
+        loginUser(data.user_id, data.username); // 登入用戶
+        // 設定一個定時器在訊息顯示後跳轉頁面
+        if (messageTimeoutRef.current) {
+          clearTimeout(messageTimeoutRef.current);
+        }
+        messageTimeoutRef.current = setTimeout(() => {
+          setCurrentPage('user_home');
+        }, 1500); // 1.5 秒後跳轉
       } else {
+        // 錯誤處理
         setMessage(data.message || '登入失敗');
         setMessageType('error');
       }
@@ -237,7 +246,7 @@ const Login = ({ setCurrentPage }) => {
         </form>
         <p className="mt-6 text-sm text-gray-600">
           還沒有帳號嗎？
-          <a href="#" onClick={() => setCurrentPage('register')} className="text-blue-500 hover:text-blue-700 font-semibold ml-1">註冊新帳號</a>
+          <button type="button" onClick={() => setCurrentPage('register')} className="text-blue-500 hover:text-blue-700 font-semibold ml-1">註冊新帳號</button>
         </p>
       </div>
     </div>
@@ -249,6 +258,7 @@ const Register = ({ setCurrentPage }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState(null);
+  const messageTimeoutRef = useRef(null); // 新增 useRef
   const [messageType, setMessageType] = useState('');
 
   const handleSubmit = async (e) => {
@@ -267,10 +277,15 @@ const Register = ({ setCurrentPage }) => {
       const data = await response.json();
 
       if (response.ok) {
-        setMessage(data.message);
-        setMessageType('success');
-        // 註冊成功後自動跳轉到登入頁面
-        setTimeout(() => setCurrentPage('login'), 1500);
+        setMessage(data.message); // 設定訊息
+        setMessageType('success'); // 設定訊息類型
+        // 設定一個定時器在訊息顯示後跳轉頁面
+        if (messageTimeoutRef.current) {
+          clearTimeout(messageTimeoutRef.current);
+        }
+        messageTimeoutRef.current = setTimeout(() => {
+          setCurrentPage('login');
+        }, 1500); // 1.5 秒後跳轉
       } else {
         setMessage(data.message || '註冊失敗');
         setMessageType('error');
@@ -319,7 +334,7 @@ const Register = ({ setCurrentPage }) => {
         </form>
         <p className="mt-6 text-sm text-gray-600">
           已經有帳號？
-          <a href="#" onClick={() => setCurrentPage('login')} className="text-blue-500 hover:text-blue-700 font-semibold ml-1">前往登入</a>
+          <button type="button" onClick={() => setCurrentPage('login')} className="text-blue-500 hover:text-blue-700 font-semibold ml-1">前往登入</button>
         </p>
       </div>
     </div>
@@ -333,11 +348,23 @@ const UserHome = ({ setCurrentPage }) => {
   const [message, setMessage] = useState(null);
   const [messageType, setMessageType] = useState('');
   const [loading, setLoading] = useState(true);
+  const messageTimeoutRef = useRef(null); // 新增 useRef
+
+  const sendMessage = useCallback((msg, type) => {
+    setMessage(msg);
+    setMessageType(type);
+    if (messageTimeoutRef.current) {
+      clearTimeout(messageTimeoutRef.current);
+    }
+    messageTimeoutRef.current = setTimeout(() => {
+      setMessage('');
+      setMessageType('');
+    }, 3000);
+  }, []);
 
   const fetchBorrowedBooks = useCallback(async () => {
-    if (!currentUser.id) {
-      setMessage('請先登入以查看借閱記錄');
-      setMessageType('error');
+    if (!currentUser || !currentUser.id) { // 確保 currentUser 和 id 存在
+      sendMessage('請先登入以查看借閱記錄', 'error');
       setLoading(false);
       return;
     }
@@ -349,17 +376,15 @@ const UserHome = ({ setCurrentPage }) => {
       if (response.ok) {
         setBorrowedBooks(data.borrowed_books);
       } else {
-        setMessage(data.message || '無法載入借閱記錄');
-        setMessageType('error');
+        sendMessage(data.message || '無法載入借閱記錄', 'error');
       }
     } catch (error) {
-      setMessage('網路錯誤或伺服器無響應');
-      setMessageType('error');
+      sendMessage('網路錯誤或伺服器無響應', 'error');
       console.error('獲取借閱記錄失敗:', error);
     } finally {
       setLoading(false);
     }
-  }, [currentUser.id]);
+  }, [currentUser, sendMessage]); // 確保依賴完整
 
   useEffect(() => {
     fetchBorrowedBooks();
@@ -381,21 +406,24 @@ const UserHome = ({ setCurrentPage }) => {
       const data = await response.json();
 
       if (response.ok) {
-        setMessage(data.message);
-        setMessageType('success');
-        fetchBorrowedBooks(); // 刷新列表
+        sendMessage(data.message, 'success');
+        // 刷新列表
+        if (messageTimeoutRef.current) {
+          clearTimeout(messageTimeoutRef.current);
+        }
+        messageTimeoutRef.current = setTimeout(() => {
+          fetchBorrowedBooks();
+        }, 1500); // 1.5 秒後刷新
       } else {
-        setMessage(data.message || '歸還失敗');
-        setMessageType('error');
+        sendMessage(data.message || '歸還失敗', 'error');
       }
     } catch (error) {
-      setMessage('網路錯誤或伺服器無響應');
-      setMessageType('error');
+      sendMessage('網路錯誤或伺服器無響應', 'error');
       console.error('歸還請求失敗:', error);
     }
   };
 
-  if (!currentUser.id) {
+  if (!currentUser || !currentUser.id) { // 確保 currentUser 和 id 存在
     return (
         <div className="flex flex-col items-center justify-center min-h-[calc(100vh-120px)] bg-gray-100 p-4">
             <div className="bg-white p-8 rounded-lg shadow-xl w-full max-w-md text-center">
@@ -467,6 +495,19 @@ const BookList = ({ setCurrentPage }) => {
   const [message, setMessage] = useState(null);
   const [messageType, setMessageType] = useState('');
   const [loading, setLoading] = useState(true);
+  const messageTimeoutRef = useRef(null); // 新增 useRef
+
+  const sendMessage = useCallback((msg, type) => {
+    setMessage(msg);
+    setMessageType(type);
+    if (messageTimeoutRef.current) {
+      clearTimeout(messageTimeoutRef.current);
+    }
+    messageTimeoutRef.current = setTimeout(() => {
+      setMessage('');
+      setMessageType('');
+    }, 3000);
+  }, []);
 
   const fetchBooks = useCallback(async () => {
     setLoading(true);
@@ -476,26 +517,23 @@ const BookList = ({ setCurrentPage }) => {
       if (response.ok) {
         setBooks(data.books);
       } else {
-        setMessage(data.message || '無法載入書籍列表');
-        setMessageType('error');
+        sendMessage(data.message || '無法載入書籍列表', 'error');
       }
     } catch (error) {
-      setMessage('網路錯誤或伺服器無響應');
-      setMessageType('error');
+      sendMessage('網路錯誤或伺服器無響應', 'error');
       console.error('獲取書籍列表失敗:', error);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [sendMessage]); // 確保依賴完整
 
   useEffect(() => {
     fetchBooks();
   }, [fetchBooks]);
 
   const handleBorrowBook = async (bookId, bookTitle) => {
-    if (!currentUser.id) {
-      setMessage('請先登入才能借閱書籍');
-      setMessageType('error');
+    if (!currentUser || !currentUser.id) { // 確保 currentUser 和 id 存在
+      sendMessage('請先登入才能借閱書籍', 'error');
       setCurrentPage('login');
       return;
     }
@@ -515,16 +553,19 @@ const BookList = ({ setCurrentPage }) => {
       const data = await response.json();
 
       if (response.ok) {
-        setMessage(data.message);
-        setMessageType('success');
-        fetchBooks(); // 刷新列表以顯示借閱狀態
+        sendMessage(data.message, 'success');
+        // 刷新列表以顯示借閱狀態
+        if (messageTimeoutRef.current) {
+          clearTimeout(messageTimeoutRef.current);
+        }
+        messageTimeoutRef.current = setTimeout(() => {
+          fetchBooks();
+        }, 1500); // 1.5 秒後刷新
       } else {
-        setMessage(data.message || '借閱失敗');
-        setMessageType('error');
+        sendMessage(data.message || '借閱失敗', 'error');
       }
     } catch (error) {
-      setMessage('網路錯誤或伺服器無響應');
-      setMessageType('error');
+      sendMessage('網路錯誤或伺服器無響應', 'error');
       console.error('借閱請求失敗:', error);
     }
   };
@@ -532,9 +573,8 @@ const BookList = ({ setCurrentPage }) => {
   const handleDeleteBook = async (bookId, bookTitle) => {
     setMessage(null);
     // 判斷是否為 'yucheng' 進行刪除
-    if (currentUser.username !== 'yucheng') {
-      setMessage('只有管理員 (yucheng) 才能刪除書籍');
-      setMessageType('error');
+    if (!currentUser || currentUser.username !== 'yucheng') { // 確保 currentUser 存在
+      sendMessage('只有管理員 (yucheng) 才能刪除書籍', 'error');
       return;
     }
     if (!window.confirm(`確定要刪除書籍 "${bookTitle}" 嗎？這將無法復原！`)) {
@@ -549,16 +589,19 @@ const BookList = ({ setCurrentPage }) => {
       const data = await response.json();
 
       if (response.ok) {
-        setMessage(data.message);
-        setMessageType('success');
-        fetchBooks(); // 重新載入書籍列表
+        sendMessage(data.message, 'success');
+        // 重新載入書籍列表
+        if (messageTimeoutRef.current) {
+          clearTimeout(messageTimeoutRef.current);
+        }
+        messageTimeoutRef.current = setTimeout(() => {
+          fetchBooks();
+        }, 1500); // 1.5 秒後刷新
       } else {
-        setMessage(data.message || '刪除失敗');
-        setMessageType('error');
+        sendMessage(data.message || '刪除失敗', 'error');
       }
     } catch (error) {
-      setMessage('網路錯誤或伺服器無響應');
-      setMessageType('error');
+      sendMessage('網路錯誤或伺服器無響應', 'error');
       console.error('刪除書籍請求失敗:', error);
     }
   };
@@ -569,9 +612,8 @@ const BookList = ({ setCurrentPage }) => {
 
   const handleUpdateBookStatus = async (bookId, newStatus) => {
     setMessage(null);
-    if (currentUser.username !== 'yucheng') {
-        setMessage('只有管理員 (yucheng) 才能更改書籍狀態');
-        setMessageType('error');
+    if (!currentUser || currentUser.username !== 'yucheng') { // 確保 currentUser 存在
+        sendMessage('只有管理員 (yucheng) 才能更改書籍狀態', 'error');
         return;
     }
 
@@ -584,16 +626,19 @@ const BookList = ({ setCurrentPage }) => {
         const data = await response.json();
 
         if (response.ok) {
-            setMessage(data.message);
-            setMessageType('success');
-            fetchBooks(); // 刷新列表以顯示新狀態
+            sendMessage(data.message, 'success');
+            // 刷新列表以顯示新狀態
+            if (messageTimeoutRef.current) {
+              clearTimeout(messageTimeoutRef.current);
+            }
+            messageTimeoutRef.current = setTimeout(() => {
+              fetchBooks();
+            }, 1500); // 1.5 秒後刷新
         } else {
-            setMessage(data.message || '更新書籍狀態失敗');
-            setMessageType('error');
+            sendMessage(data.message || '更新書籍狀態失敗', 'error');
         }
     } catch (error) {
-        setMessage('網路錯誤或伺服器無響應');
-        setMessageType('error');
+        sendMessage('網路錯誤或伺服器無響應', 'error');
         console.error('更新書籍狀態請求失敗:', error);
     }
   };
@@ -617,7 +662,7 @@ const BookList = ({ setCurrentPage }) => {
             返回首頁
           </button>
           {/* 判斷如果用戶名是 'yucheng' 則顯示新增書籍按鈕 */}
-          {currentUser.username === 'yucheng' && (
+          {currentUser && currentUser.username === 'yucheng' && ( // 確保 currentUser 存在
             <button
               onClick={() => setCurrentPage('book_create')}
               className="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-300 ease-in-out transform hover:scale-105"
@@ -662,7 +707,7 @@ const BookList = ({ setCurrentPage }) => {
                     </td>
                     <td className="py-3 px-4 space-x-2">
                       {/* 判斷如果用戶名是 'yucheng' 則顯示狀態下拉選單和編輯、刪除按鈕 */}
-                      {currentUser.username === 'yucheng' ? (
+                      {currentUser && currentUser.username === 'yucheng' ? ( // 確保 currentUser 存在
                         <div className="flex items-center space-x-2">
                           <select
                             value={book.status}
@@ -688,7 +733,7 @@ const BookList = ({ setCurrentPage }) => {
                         </div>
                       ) : (
                         // 非 yucheng 用戶只能借閱
-                        !book.is_borrowed && currentUser.id && book.status === 'AVAILABLE' && (
+                        currentUser && currentUser.id && book.status === 'AVAILABLE' && ( // 確保 currentUser 存在
                           <button
                             onClick={() => handleBorrowBook(book.id, book.title)}
                             className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-1 px-3 rounded-lg text-sm shadow-md transition duration-300 ease-in-out"
@@ -711,6 +756,28 @@ const BookList = ({ setCurrentPage }) => {
   );
 };
 
+// ===========================================
+// 新增組件: BookQRCodeGenerator (書籍 QR Code 生成器)
+// ===========================================
+const BookQRCodeGenerator = ({ isbn }) => {
+  if (!isbn) {
+    return <p className="text-red-500">沒有書籍 ISBN 無法生成 QR Code。</p>;
+  }
+
+  // 使用 ISBN，因為掃描器預期會得到 ISBN
+  const qrCodeValue = isbn;
+
+  return (
+    <div className="p-4 bg-white rounded-lg shadow-md text-center">
+      <h4 className="text-lg font-semibold mb-2">書籍 QR Code (ISBN: {isbn})</h4>
+      <div className="flex justify-center">
+        <QRCodeCanvas value={qrCodeValue} size={128} level="H" includeMargin={true} /> {/* 修改為 QRCodeCanvas */}
+      </div>
+      <p className="mt-2 text-sm text-gray-600">掃描此 QR Code 以快速查找書籍。</p>
+    </div>
+  );
+};
+
 // BookCreate: 新增書籍 
 const BookCreate = ({ setCurrentPage }) => {
   const { currentUser } = useContext(AuthContext);
@@ -721,18 +788,21 @@ const BookCreate = ({ setCurrentPage }) => {
   const [status, setStatus] = useState(STATUS_OPTIONS[0].value);
   const [message, setMessage] = useState(null);
   const [messageType, setMessageType] = useState('');
+  const [createdBookIsbn, setCreatedBookIsbn] = useState(null); // 用於儲存新建立書籍的 ISBN
+  const messageTimeoutRef = useRef(null);
 
   useEffect(() => {
-    if (currentUser.username !== 'yucheng') {
+    if (!currentUser || currentUser.username !== 'yucheng') { // 確保 currentUser 存在
       setMessage('您沒有權限訪問此頁面。');
       setMessageType('error');
       setCurrentPage('home');
     }
-  }, [currentUser.username, setCurrentPage]);
+  }, [currentUser, setCurrentPage]); // 確保依賴完整
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
+    e.preventDefault(); // 阻止表單預設提交行為
     setMessage(null);
+    setCreatedBookIsbn(null); // 每次提交前清空 QR Code
 
     if (!title || !author || !isbn || !category || !status) { // 檢查所有欄位是否都填寫
       setMessage('請填寫所有欄位');
@@ -740,7 +810,7 @@ const BookCreate = ({ setCurrentPage }) => {
       return;
     }
 
-    try {
+    try { // 發送 POST 請求新增書籍
       const response = await fetch('/api/books/create/', {
         method: 'POST',
         headers: {
@@ -751,15 +821,21 @@ const BookCreate = ({ setCurrentPage }) => {
       const data = await response.json();
 
       if (response.ok) {
-        setMessage(data.message);
-        setMessageType('success');
-        setTitle('');
+        setMessage(data.message); // 設定成功訊息
+        setMessageType('success'); // 設定訊息類型
+        setCreatedBookIsbn(isbn); // 設定新建立書籍的 ISBN 以顯示 QR Code
+        
+        // 清空表單欄位
+        setTitle(''); 
         setAuthor('');
         setIsbn('');
-        setCategory(CATEGORY_OPTIONS[0].value);
-        setStatus(STATUS_OPTIONS[0].value); // 重置狀態
+        setCategory(CATEGORY_OPTIONS[0].value); // 重置分類為預設值
+        setStatus(STATUS_OPTIONS[0].value); // 重置狀態為預設值
+        
+        // 這裡不再立即跳轉，讓用戶看到 QR Code
+        // setTimeout(() => setCurrentPage('book_list'), 1500);
       } else {
-        setMessage(data.message || '新增書籍失敗');
+        setMessage(data.message || '新增書籍失敗'); // 設定錯誤訊息
         setMessageType('error');
       }
     } catch (error) {
@@ -769,27 +845,11 @@ const BookCreate = ({ setCurrentPage }) => {
     }
   };
 
-  if (currentUser.username !== 'yucheng') {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[calc(100vh-120px)] bg-gray-100 p-4">
-        <div className="bg-white p-8 rounded-lg shadow-xl w-full max-w-md text-center">
-          <MessageDisplay message={message} type={messageType} />
-          <button
-            onClick={() => setCurrentPage('home')}
-            className="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition duration-300"
-          >
-            回到首頁
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="flex flex-col items-center justify-center min-h-[calc(100vh-120px)] bg-gray-100 p-4">
       <div className="bg-white p-8 rounded-lg shadow-xl w-full max-w-md">
         <h1 className="text-3xl font-bold text-gray-800 mb-6 text-center">新增書籍</h1>
-        {message && <MessageDisplay message={message} type={messageType} />}
+        {message && <MessageDisplay message={message} type={messageType} /> /* 顯示訊息 */}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label htmlFor="book-title" className="block text-gray-700 text-sm font-semibold mb-2 text-left">書名</label>
@@ -859,6 +919,7 @@ const BookCreate = ({ setCurrentPage }) => {
             新增書籍
           </button>
         </form>
+        
         <div className="text-center mt-6">
           <button
             onClick={() => setCurrentPage('book_list')}
@@ -868,6 +929,20 @@ const BookCreate = ({ setCurrentPage }) => {
           </button>
         </div>
       </div>
+      {/* 顯示生成的 QR Code */}
+      {createdBookIsbn && (
+        <div className="mt-8"> {/* 顯示 QR Code 的容器 */}
+          <BookQRCodeGenerator isbn={createdBookIsbn} /> {/* QR Code 生成組件 */}
+          <div className="flex justify-center mt-4"> {/* 按鈕居中 */}
+            <button 
+              onClick={() => setCurrentPage('book_list')} 
+              className="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-500"
+            > 
+              返回書籍列表 
+            </button> 
+          </div> 
+        </div>
+      )}
     </div>
   );
 };
@@ -884,56 +959,67 @@ const BookEdit = ({ setCurrentPage, bookId }) => {
   const [message, setMessage] = useState(null);
   const [messageType, setMessageType] = useState('');
   const [loading, setLoading] = useState(true);
+  const messageTimeoutRef = useRef(null); // 新增 useRef
+
+  // 用於發送訊息的輔助函數 (新增在組件內部)
+  const sendMessage = useCallback((msg, type) => {
+    setMessage(msg);
+    setMessageType(type);
+    if (messageTimeoutRef.current) {
+      clearTimeout(messageTimeoutRef.current);
+    }
+    messageTimeoutRef.current = setTimeout(() => {
+      setMessage('');
+      setMessageType('');
+    }, 3000);
+  }, []);
+
+  // 包裹 fetchBookDetails 在 useCallback 中
+  const fetchBookDetails = useCallback(async () => {
+    if (!bookId) {
+      sendMessage('未提供書籍 ID。', 'error'); // 使用內部定義的 sendMessage
+      setLoading(false);
+      setCurrentPage('book_list');
+      return;
+    }
+    try {
+      const response = await fetch(`/api/books/${bookId}/`);
+      const data = await response.json();
+      if (response.ok) {
+        setTitle(data.book.title);
+        setAuthor(data.book.author);
+        setIsbn(data.book.isbn);
+        setCategory(data.book.category || CATEGORY_OPTIONS[0].value);
+        setStatus(data.book.status || STATUS_OPTIONS[0].value); 
+      } else {
+        sendMessage(data.message || '無法載入書籍詳細資訊', 'error'); // 使用內部定義的 sendMessage
+      }
+    } catch (error) {
+      sendMessage('網路錯誤或伺服器無響應', 'error'); // 使用內部定義的 sendMessage
+      console.error('獲取書籍詳細資訊失敗:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [bookId, setCurrentPage, sendMessage]); // 將 sendMessage 加入依賴
 
   useEffect(() => {
     // 檢查權限
-    if (currentUser.username !== 'yucheng') {
+    if (!currentUser || currentUser.username !== 'yucheng') { // 確保 currentUser 存在
       setMessage('您沒有權限訪問此頁面。');
       setMessageType('error');
       setCurrentPage('home');
       return;
     }
 
-    const fetchBookDetails = async () => {
-      if (!bookId) {
-        setMessage('未提供書籍 ID。');
-        setMessageType('error');
-        setLoading(false);
-        setCurrentPage('book_list');
-        return;
-      }
-      try {
-        const response = await fetch(`/api/books/${bookId}/`);
-        const data = await response.json();
-        if (response.ok) {
-          setTitle(data.book.title);
-          setAuthor(data.book.author);
-          setIsbn(data.book.isbn);
-          setCategory(data.book.category || CATEGORY_OPTIONS[0].value);
-          setStatus(data.book.status || STATUS_OPTIONS[0].value); 
-        } else {
-          setMessage(data.message || '無法載入書籍詳細資訊');
-          setMessageType('error');
-        }
-      } catch (error) {
-        setMessage('網路錯誤或伺服器無響應');
-        setMessageType('error');
-        console.error('獲取書籍詳細資訊失敗:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchBookDetails();
-  }, [bookId, currentUser.username, setCurrentPage]);
+    fetchBookDetails(); // 調用 memoized 的 fetchBookDetails
+  }, [bookId, currentUser, setCurrentPage, fetchBookDetails]); // 將 fetchBookDetails 加入依賴
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setMessage(null);
 
     if (!title || !author || !isbn || !category || !status) { // 檢查所有欄位
-      setMessage('請填寫所有欄位');
-      setMessageType('error');
+      sendMessage('請填寫所有欄位', 'error'); // 使用內部定義的 sendMessage
       return;
     }
 
@@ -948,21 +1034,28 @@ const BookEdit = ({ setCurrentPage, bookId }) => {
       const data = await response.json();
 
       if (response.ok) {
-        setMessage(data.message);
-        setMessageType('success');
-        setTimeout(() => setCurrentPage('book_list'), 1500);
+        sendMessage(data.message, 'success'); // 使用內部定義的 sendMessage
+        setTitle(''); // 清空書名
+        setAuthor(''); // 清空作者
+        setIsbn('');  // 清空 ISBN
+        setCategory('OTHER'); // 重置分類為預設值
+        setStatus('AVAILABLE'); // 重置狀態為預設值
+        if (messageTimeoutRef.current) {
+          clearTimeout(messageTimeoutRef.current);
+        }
+        messageTimeoutRef.current = setTimeout(() => {
+          setCurrentPage('book_list');
+        }, 1500);
       } else {
-        setMessage(data.message || '更新書籍失敗');
-        setMessageType('error');
+        sendMessage(data.message || '更新書籍失敗', 'error'); // 使用內部定義的 sendMessage
       }
     } catch (error) {
-      setMessage('網路錯誤或伺服器無響應');
-      setMessageType('error');
+      sendMessage('網路錯誤或伺服器無響應', 'error'); // 使用內部定義的 sendMessage
       console.error('更新書籍請求失敗:', error);
     }
   };
 
-  if (currentUser.username !== 'yucheng') {
+  if (!currentUser || currentUser.username !== 'yucheng') { // 確保 currentUser 存在
     return (
       <div className="flex flex-col items-center justify-center min-h-[calc(100vh-120px)] bg-gray-100 p-4">
         <div className="bg-white p-8 rounded-lg shadow-xl w-full max-w-md text-center">
@@ -979,7 +1072,13 @@ const BookEdit = ({ setCurrentPage, bookId }) => {
   }
 
   if (loading) {
-    return <div className="flex justify-center items-center min-h-[calc(100vh-120px)] text-xl">載入中...</div>;
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[calc(100vh-120px)] bg-gray-100 p-4">
+        <div className="bg-white p-8 rounded-lg shadow-xl w-full max-w-md text-center">
+          <p className="text-gray-600 text-lg">載入中...</p>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -1079,24 +1178,24 @@ const EditProfile = ({ setCurrentPage }) => {
   const [message, setMessage] = useState(null);
   const [messageType, setMessageType] = useState('');
   const [loading, setLoading] = useState(true);
+  const messageTimeoutRef = useRef(null); // 新增 useRef
 
   // 初次載入時只顯示用戶名
   useEffect(() => {
-    if (!currentUser.id) {
+    if (!currentUser || !currentUser.id) { // 確保 currentUser 存在
       setCurrentPage('login'); // 未登入則跳轉登入
       return;
     }
     
     setCurrentUsername(currentUser.username);
     setLoading(false); // 設置為不載入
-  }, [currentUser.id, currentUser.username, setCurrentPage]);
-
+  }, [currentUser, setCurrentPage]); // 確保依賴完整
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setMessage(null);
 
-    if (!currentUser.id) {
+    if (!currentUser || !currentUser.id) { // 確保 currentUser 存在
       setMessage('您尚未登入。');
       setMessageType('error');
       return;
@@ -1142,7 +1241,12 @@ const EditProfile = ({ setCurrentPage }) => {
         setMessageType('success');
         setNewPassword('');
         setConfirmPassword('');
-        setTimeout(() => setCurrentPage('user_home'), 1500);
+        if (messageTimeoutRef.current) {
+          clearTimeout(messageTimeoutRef.current);
+        }
+        messageTimeoutRef.current = setTimeout(() => {
+          setCurrentPage('user_home');
+        }, 1500);
       } else {
         setMessage(data.message || '更新失敗。');
         setMessageType('error');
@@ -1155,7 +1259,19 @@ const EditProfile = ({ setCurrentPage }) => {
   };
 
   if (loading) {
-    return <div className="flex justify-center items-center min-h-[calc(100vh-120px)] text-xl">載入中...</div>;
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[calc(100vh-120px)] bg-gray-100 p-4">
+        <div className="bg-white p-8 rounded-lg shadow-xl w-full max-w-md text-center">
+          <MessageDisplay message={message} type={messageType} />
+          <button
+            onClick={() => setCurrentPage('home')}
+            className="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition duration-300"
+          >
+            回到首頁
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -1210,330 +1326,479 @@ const EditProfile = ({ setCurrentPage }) => {
   );
 };
 
-// ScannedBarcodeDisplay: 顯示掃描圖像及紅色框標示 
-const ScannedBarcodeDisplay = ({ imageDataUrl, boundingBox }) => {
-  const canvasRef = useRef(null);
+// ===========================================
+// 新增組件: BookDetail (書籍詳細資訊頁面)
+// 用於顯示單本書籍的詳細資訊，可從掃描頁面跳轉過來
+// ===========================================
+const BookDetail = ({ setCurrentPage, identifier }) => {
+  const { currentUser } = useContext(AuthContext);
+  const [book, setBook] = useState(null);
+  const [message, setMessage] = useState('');
+  const [messageType, setMessageType] = useState('');
+  const [loading, setLoading] = useState(true);
+  const messageTimeoutRef = useRef(null);
 
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    const context = canvas.getContext('2d');
-    const image = new Image();
-
-    image.onload = () => {
-      // 確保 canvas 尺寸與圖像一致，以正確繪製
-      canvas.width = image.width;
-      canvas.height = image.height;
-      context.clearRect(0, 0, canvas.width, canvas.height); // 清除舊內容
-      context.drawImage(image, 0, 0); // 繪製圖像
-
-      if (boundingBox) {
-        context.strokeStyle = 'red'; 
-        context.lineWidth = 4;        // 線寬
-        // 繪製矩形框
-        context.strokeRect(boundingBox.x, boundingBox.y, boundingBox.width, boundingBox.height);
-      }
-    };
-
-    if (imageDataUrl) {
-      image.src = imageDataUrl;
+  const sendMessage = useCallback((msg, type) => {
+    setMessage(msg);
+    setMessageType(type);
+    if (messageTimeoutRef.current) {
+      clearTimeout(messageTimeoutRef.current);
     }
-  }, [imageDataUrl, boundingBox]); // 當圖像數據或邊界框改變時重新繪製
-
-  if (!imageDataUrl) return null;
-
-  return (
-    <div className="mt-6 flex justify-center">
-      <div className="relative border-2 border-gray-300 rounded-lg overflow-hidden">
-        <canvas ref={canvasRef} className="max-w-full h-auto"></canvas>
-      </div>
-    </div>
-  );
-};
-
-
-// BarcodeScanner: 條碼/QR Code 掃描組件
-// 負責攝影機串流、圖像捕獲和發送到後端
-const BarcodeScanner = ({ onScanResult, onError, scanningIntent }) => {
-  const videoRef = useRef(null);
-  const canvasRef = useRef(null); // 用於捕獲圖像的隱藏 canvas
-  const [stream, setStream] = useState(null);
-  const [scanning, setScanning] = useState(false);
-  const scanIntervalRef = useRef(null);
-
-  const startScan = async () => {
-    try {
-      // 請求訪問使用者媒體設備 
-      const mediaStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } }); // 優先使用後置攝影機
-      videoRef.current.srcObject = mediaStream;
-      setStream(mediaStream);
-      setScanning(true);
-
-      // 等待視訊載入完成
-      videoRef.current.onloadedmetadata = () => {
-        videoRef.current.play();
-        // 每隔一段時間捕獲一幀並發送到後端
-        scanIntervalRef.current = setInterval(captureAndSendFrame, 1000); // 每秒捕獲一次
-      };
-    } catch (err) {
-      console.error("無法訪問攝影機:", err);
-      onError("無法訪問攝影機，請檢查權限。");
-      setScanning(false);
-    }
-  };
-
-  const stopScan = () => {
-    if (stream) {
-      stream.getTracks().forEach(track => track.stop());
-      setStream(null);
-    }
-    if (scanIntervalRef.current) {
-      clearInterval(scanIntervalRef.current);
-      scanIntervalRef.current = null;
-    }
-    setScanning(false);
-  };
-
-  const captureAndSendFrame = async () => {
-    if (!videoRef.current || !canvasRef.current || !scanning) return;
-
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    const context = canvas.getContext('2d');
-
-    // 設置 canvas 大小與視訊流相同
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    context.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-    // 將圖像轉換為 Base64 格式
-    const imageData = canvas.toDataURL('image/jpeg', 0.8); // 獲取完整的 Base64 數據
-    const imageDataPart = imageData.split(',')[1]; // 只取 Base64 數據部分給後端
-
-    try {
-      const response = await fetch('/api/scan_code/', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ image: imageDataPart }), // 發送數據部分
-      });
-      const data = await response.json();
-
-      if (response.ok && data.decoded_text) {
-        // 成功辨識，將辨識結果、圖像數據和邊界框傳遞給父組件
-        onScanResult(data.decoded_text, imageData, data.bounding_box); 
-        stopScan(); // 辨識成功後停止掃描
-      } else if (data.message && data.message !== "未找到條碼或QR碼") {
-        // 僅當有特定錯誤訊息而不是 "未找到" 時才顯示
-        onError(data.message);
-      }
-      // 如果未找到條碼，但也沒有其他錯誤，則繼續掃描
-    } catch (error) {
-      console.error("掃描 API 請求失敗:", error);
-      onError("掃描失敗，網路或伺服器錯誤。");
-    }
-  };
-
-  useEffect(() => {
-    // 組件卸載時停止掃描
-    return () => {
-      stopScan();
-    };
+    messageTimeoutRef.current = setTimeout(() => {
+      setMessage('');
+      setMessageType('');
+    }, 3000);
   }, []);
 
-  return (
-    <div className="flex flex-col items-center p-4 bg-gray-200 rounded-lg shadow-md">
-      <h3 className="text-xl font-semibold text-gray-800 mb-4">條碼/QR Code 掃描器</h3>
-      <video ref={videoRef} className="w-full max-w-md rounded-lg shadow-lg mb-4" muted autoPlay playsInline></video>
-      <canvas ref={canvasRef} className="hidden"></canvas> {/* 用於捕獲圖像 */}
-      
-      <div className="flex space-x-4">
-        {!scanning ? (
-          <button
-            onClick={startScan}
-            className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-300"
-          >
-            啟動掃描
-          </button>
-        ) : (
-          <button
-            onClick={stopScan}
-            className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-300"
-          >
-            停止掃描
-          </button>
-        )}
-      </div>
-      <p className="mt-4 text-gray-600">請將條碼或QR Code對準攝影機。</p>
-    </div>
-  );
-};
-
-// QuickScanPage: 快速掃描頁面
-// 整合 BarcodeScanner，並處理掃描結果
-const QuickScanPage = ({ setCurrentPage }) => {
-  const { currentUser } = useContext(AuthContext);
-  const [scanResult, setScanResult] = useState('');
-  const [message, setMessage] = useState(null);
-  const [messageType, setMessageType] = useState('');
-  const [actionType, setActionType] = useState('borrow'); // 'borrow' or 'return'
-  const [scannedImageBase64, setScannedImageBase64] = useState(null); // 用於顯示掃描到的圖像
-  const [scannedBoundingBox, setScannedBoundingBox] = useState(null); // 用於顯示掃描到的邊界框
-
-  // 修改 onScanResult 接收圖像數據和邊界框
-  const handleScanResult = useCallback(async (decodedText, imageData, boundingBox) => {
-    setScanResult(decodedText);
-    setScannedImageBase64(imageData); // 保存圖像數據
-    setScannedBoundingBox(boundingBox); // 保存邊界框數據
-    setMessage(`已辨識到：${decodedText}`);
-    setMessageType('success');
-
-    if (!currentUser.id) {
-        setMessage('請先登入才能進行借還操作。');
-        setMessageType('error');
+  useEffect(() => {
+    const fetchBook = async () => {
+      if (!identifier) {
+        sendMessage('未提供書籍識別碼', 'error');
+        setLoading(false);
         return;
+      }
+      try {
+        const response = await fetch(`/api/books/${identifier}/`);
+        const data = await response.json();
+        if (response.ok) {
+          setBook(data.book);
+          sendMessage('成功載入書籍資訊', 'success');
+        } else {
+          sendMessage(data.message || '找不到書籍', 'error');
+          setBook(null);
+        }
+      } catch (error) {
+        sendMessage('網路錯誤或無法載入書籍資訊', 'error');
+        setBook(null);
+        console.error('獲取書籍詳情失敗:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchBook();
+  }, [identifier, sendMessage]);
+
+  const handleBorrowBook = async () => {
+    if (!currentUser || !currentUser.id) {
+      sendMessage('請先登入才能借閱書籍', 'error');
+      setCurrentPage('login');
+      return;
+    }
+    if (!book || book.status !== 'AVAILABLE') {
+      sendMessage('該書籍目前無法借閱', 'error');
+      return;
     }
 
-    try {
-        let apiEndpoint = '';
-        let requestBody = {};
-        let successMessage = '';
-        let failureMessage = '';
-
-        // 嘗試查找書籍ID (假設掃描的是 ISBN)
-        const bookListResponse = await fetch('/api/books/');
-        const bookListData = bookListResponse.ok ? await bookListResponse.json() : { books: [] };
-        const foundBook = bookListData.books.find(book => book.isbn === decodedText);
-
-        if (!foundBook) {
-            setMessage('未找到對應的書籍。');
-            setMessageType('error');
-            return;
-        }
-
-        if (actionType === 'borrow') {
-            apiEndpoint = `/api/books/borrow/${foundBook.id}/`;
-            requestBody = { user_id: currentUser.id };
-            successMessage = `${foundBook.title} 借閱成功！`;
-            failureMessage = `${foundBook.title} 借閱失敗。`;
-        } else { // actionType === 'return'
-            const userHomeResponse = await fetch(`/api/user_home/?user_id=${currentUser.id}`);
-            const userHomeData = userHomeResponse.ok ? await userHomeResponse.json() : { borrowed_books: [] };
-            const relevantBorrowRecord = userHomeData.borrowed_books.find(record => record.book_title === foundBook.title && !record.returned);
-
-            if (!relevantBorrowRecord) {
-                setMessage('未找到您借閱此書的未歸還記錄。');
-                setMessageType('error');
-                return;
-            }
-
-            apiEndpoint = `/api/books/return/${relevantBorrowRecord.id}/`;
-            requestBody = {}; 
-            successMessage = `${foundBook.title} 歸還成功！`;
-            failureMessage = `${foundBook.title} 歸還失敗。`;
-        }
-
-        const response = await fetch(apiEndpoint, {
-            method: 'POST', 
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(requestBody),
+    if (window.confirm(`確定要借閱 "${book.title}" 嗎？`)) {
+      try {
+        const response = await fetch(`/api/books/borrow/${book.id}/`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ user_id: currentUser.id }),
         });
         const data = await response.json();
-
         if (response.ok) {
-            setMessage(data.message || successMessage);
-            setMessageType('success');
-            // 成功後不清空掃描結果，讓用戶看到圖片和框
-            // setScanResult(''); 
-            // setScannedImageBase64(null); 
-            // setScannedBoundingBox(null);
+          sendMessage('借閱成功', 'success');
+          // 刷新書籍狀態
+          setBook(prevBook => ({ ...prevBook, status: 'BORROWED', is_borrowed: true })); // 假設後端會更新這些狀態
         } else {
-            setMessage(data.message || failureMessage);
-            setMessageType('error');
+          sendMessage(data.message || '借閱失敗', 'error');
         }
-
-    } catch (error) {
-        setMessage(`處理掃描結果時發生錯誤：${error.message}`);
-        setMessageType('error');
-        console.error('處理掃描結果失敗:', error);
+      } catch (error) {
+        console.error('借閱書籍錯誤:', error);
+        sendMessage('網絡或伺服器錯誤', 'error');
+      }
     }
-  }, [currentUser.id, actionType]);
+  };
 
-  const handleScannerError = useCallback((errMsg) => {
-    setMessage(errMsg);
-    setMessageType('error');
-  }, []);
+  const handleReturnBook = async () => {
+    if (!currentUser || !currentUser.id) {
+      sendMessage('請先登入才能歸還書籍', 'error');
+      setCurrentPage('login');
+      return;
+    }
+    if (!book || book.status === 'AVAILABLE') {
+      sendMessage('該書籍未被借閱，無需歸還', 'error');
+      return;
+    }
 
-  if (!currentUser.id) {
+    if (window.confirm(`確定要歸還 "${book.title}" 嗎？`)) {
+      try {
+        // 使用新增的根據書籍ID和用戶ID歸還的API
+        const response = await fetch(`/api/books/return_by_book_and_user/`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ book_id: book.id, user_id: currentUser.id }),
+        });
+        const data = await response.json();
+        if (response.ok) {
+          sendMessage('歸還成功', 'success');
+          // 刷新書籍狀態
+          setBook(prevBook => ({ ...prevBook, status: 'AVAILABLE', is_borrowed: false })); // 假設後端會更新這些狀態
+        } else {
+          sendMessage(data.message || '歸還失敗', 'error');
+        }
+      } catch (error) {
+        console.error('歸還書籍錯誤:', error);
+        sendMessage('網絡或伺服器錯誤', 'error');
+      }
+    }
+  };
+
+  if (loading) {
+    return <div className="flex justify-center items-center min-h-[calc(100vh-120px)] text-xl">載入中...</div>;
+  }
+
+  if (!book) {
     return (
-        <div className="flex flex-col items-center justify-center min-h-[calc(100vh-120px)] bg-gray-100 p-4">
-            <div className="bg-white p-8 rounded-lg shadow-xl w-full max-w-md text-center">
-                <h2 className="text-2xl font-bold text-red-600 mb-4">未登入</h2>
-                <p className="text-gray-700 mb-6">請先登入以使用快速掃描功能。</p>
-                <button
-                    onClick={() => setCurrentPage('login')}
-                    className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg transition duration-300"
-                >
-                    前往登入
-                </button>
-            </div>
+      <div className="flex flex-col items-center justify-center min-h-[calc(100vh-120px)] bg-gray-100 p-4">
+        <div className="bg-white p-8 rounded-lg shadow-xl w-full max-w-md text-center">
+          <h2 className="text-2xl font-bold text-red-600 mb-4">書籍不存在</h2>
+          <MessageDisplay message={message} type={messageType} />
+          <button
+            onClick={() => setCurrentPage('quick_scan')}
+            className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg transition duration-300"
+          >
+            返回掃描頁面
+          </button>
         </div>
+      </div>
     );
   }
 
   return (
-    <div className="container mx-auto p-4 md:p-8">
-      <div className="bg-white p-6 rounded-lg shadow-xl text-center">
-        <h2 className="text-3xl font-bold text-gray-800 mb-6">快速掃描</h2>
+    <div className="container mx-auto p-4 md:p-8 max-w-2xl">
+      <div className="bg-white p-6 rounded-lg shadow-xl">
+        <h2 className="text-3xl font-bold text-gray-800 mb-6 text-center">書籍詳細資訊</h2>
         {message && <MessageDisplay message={message} type={messageType} />}
 
-        <div className="mb-6">
-            <label className="mr-4 text-lg font-medium text-gray-700">選擇操作：</label>
-            <input
-                type="radio"
-                id="actionBorrow"
-                name="actionType"
-                value="borrow"
-                checked={actionType === 'borrow'}
-                onChange={() => setActionType('borrow')}
-                className="mr-2"
-            />
-            <label htmlFor="actionBorrow" className="mr-4 text-gray-700">借書</label>
-            <input
-                type="radio"
-                id="actionReturn"
-                name="actionType"
-                value="return"
-                checked={actionType === 'return'}
-                onChange={() => setActionType('return')}
-                className="mr-2"
-            />
-            <label htmlFor="actionReturn" className="text-gray-700">還書</label>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-left">
+          <p><strong>書名:</strong> {book.title}</p>
+          <p><strong>作者:</strong> {book.author}</p>
+          <p><strong>ISBN:</strong> {book.isbn}</p>
+          <p><strong>分類:</strong> {CATEGORY_OPTIONS.find(cat => cat.value === book.category)?.label || book.category}</p>
+          <p><strong>出版社:</strong> {book.publisher || 'N/A'}</p>
+          <p><strong>出版年份:</strong> {book.publication_year || 'N/A'}</p>
+          <p className="md:col-span-2">
+            <strong>狀態:</strong> <span className={`font-semibold ${book.status === 'AVAILABLE' ? 'text-green-600' : 'text-red-600'}`}>
+              {STATUS_OPTIONS.find(s => s.value === book.status)?.label || book.status}
+            </span>
+          </p>
+          <p className="md:col-span-2"><strong>描述:</strong> {book.description || '無描述'}</p>
         </div>
 
-        {/* BarcodeScanner 不再直接顯示掃描結果，而是將結果傳遞給 QuickScanPage */}
-        <BarcodeScanner onScanResult={handleScanResult} onError={handleScannerError} scanningIntent={actionType} />
-        
-        {scanResult && (
-          <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
-            <p className="text-lg font-medium text-blue-800">掃描結果: <span className="font-mono text-blue-900 break-words">{scanResult}</span></p>
-            {/* 顯示掃描到的圖像，並用紅色框標示 */}
-            <ScannedBarcodeDisplay imageDataUrl={scannedImageBase64} boundingBox={scannedBoundingBox} />
-            <p className="text-sm text-gray-600 mt-2">系統已嘗試根據掃描結果執行 {actionType === 'borrow' ? '借書' : '還書'} 操作。</p>
+        {currentUser && currentUser.id && (
+          <div className="flex justify-center gap-4 mt-6">
+            {book.status === 'AVAILABLE' ? (
+              <button
+                onClick={handleBorrowBook}
+                className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-green-500 text-lg"
+              >
+                借閱書籍
+              </button>
+            ) : (
+              <button
+                onClick={handleReturnBook}
+                className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-6 rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-purple-500 text-lg"
+              >
+                歸還書籍
+              </button>
+            )}
           </div>
         )}
 
         <div className="text-center mt-8">
           <button
-            onClick={() => setCurrentPage('home')}
+            onClick={() => setCurrentPage('quick_scan')}
             className="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition duration-300"
           >
-            回到首頁
+            返回掃描頁面
+          </button>
+          <button
+            onClick={() => setCurrentPage('book_list')}
+            className="ml-4 bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition duration-300"
+          >
+            返回書籍列表
           </button>
         </div>
       </div>
     </div>
   );
+};
+
+
+// ===========================================
+// 組件: QuickScanPage (快速掃描 QR Code 頁面)
+// ===========================================
+const QuickScanPage = ({ setCurrentPage }) => {
+    const videoRef = useRef(null); // 用於攝像頭視訊流
+    const canvasRef = useRef(null); // 用於從視頻流捕獲圖像
+    const [decodedText, setDecodedText] = useState(''); // 掃描到的文本
+    const [message, setMessage] = useState(''); // 訊息顯示
+    const [messageType, setMessageType] = useState(''); // 訊息類型
+    const [scanning, setScanning] = useState(false); // 掃描狀態
+    const scanIntervalRef = useRef(null); // 用於儲存 setInterval 的 ID
+    const messageTimeoutRef = useRef(null); // 使用 useRef 管理 setTimeout
+
+    // 新增狀態來儲存可用的攝影機設備列表和選定的攝影機ID
+    const [cameras, setCameras] = useState([]);
+    const [selectedCameraId, setSelectedCameraId] = useState('');
+
+    const { currentUser } = useContext(AuthContext); // 從 AuthContext 取得 currentUser
+
+    // 用於發送訊息的輔助函數
+    const sendMessage = useCallback((msg, type) => {
+        setMessage(msg);
+        setMessageType(type); // 設定訊息類型
+        if (messageTimeoutRef.current) {
+            clearTimeout(messageTimeoutRef.current);
+        }
+        messageTimeoutRef.current = setTimeout(() => {
+            setMessage('');
+            setMessageType('');
+        }, 3000);
+    }, []);
+
+    // 啟動攝影機
+    const startCamera = async () => {
+        if (!selectedCameraId) {
+            sendMessage('請選擇一個攝影機', 'error');
+            return;
+        }
+
+        try {
+            // 停止任何現有的視訊流
+            stopCamera(); 
+
+            // 使用 selectedCameraId 來指定要使用的攝影機
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+              video: { 
+                deviceId: selectedCameraId, // 使用選定的攝影機 ID
+                aspectRatio: { ideal: 1.7777777778 } // 16:9 比例
+              } 
+            });
+            if (videoRef.current) {
+                videoRef.current.srcObject = stream;
+                videoRef.current.onloadedmetadata = () => {
+                    // 確保影片數據已完全載入並可播放
+                    if (videoRef.current.readyState >= 2) { // READY_STATE.HAVE_CURRENT_DATA or higher
+                        videoRef.current.play();
+                        setScanning(true);
+                        sendMessage('攝影機已啟動，正在掃描...', 'success');
+                        // 啟動定期掃描，獲取圖像並嘗試解碼
+                        scanIntervalRef.current = setInterval(decodeQRCodeFromCamera, 500); // 每 500 毫秒掃描一次
+                    } else {
+                        // 如果影片還未準備好，可以嘗試等待或發出警告
+                        sendMessage('攝影機影片尚未準備好，請稍候...', 'info');
+                        // 這裡可以考慮增加一個延遲後重試 onloadedmetadata 的邏輯
+                    }
+                };
+            }
+        } catch (err) {
+            console.error("無法訪問攝影機:", err);
+            if (err.name === "NotAllowedError") {
+                sendMessage('無法啟動攝影機：您已拒絕攝影機權限。請在瀏覽器設定中啟用。', 'error');
+            } else if (err.name === "NotFoundError") {
+                sendMessage('無法啟動攝影機：找不到可用的攝影機。', 'error');
+            } else if (err.name === "NotReadableError") {
+                sendMessage('無法啟動攝影機：攝影機可能正在被其他應用程式使用。', 'error');
+            } else {
+                sendMessage(`無法啟動攝影機：${err.message || '未知錯誤'}`, 'error');
+            }
+            setScanning(false);
+        }
+    };
+
+    // 停止攝影機
+    const stopCamera = useCallback(() => { 
+        if (videoRef.current && videoRef.current.srcObject) {
+            const stream = videoRef.current.srcObject; // 獲取當前視訊流
+            const tracks = stream.getTracks();
+            tracks.forEach(track => track.stop()); // 停止所有軌道 (視訊和音訊)
+            videoRef.current.srcObject = null;
+            setScanning(false);
+            if (scanIntervalRef.current) { // 清除掃描定時器
+                clearInterval(scanIntervalRef.current);
+                scanIntervalRef.current = null;
+            }
+            sendMessage('攝影機已停止', 'info'); // 發送訊息
+            setDecodedText(''); // 清空掃描結果
+        }
+    }, [sendMessage]); 
+
+    // 前端直接解碼 QR Code
+    const decodeQRCodeFromCamera = useCallback(() => { // 將 decodeQRCodeFromCamera 包裹在 useCallback 中
+        if (!scanning || !videoRef.current || !canvasRef.current || videoRef.current.videoWidth === 0) {
+            console.log("decodeQRCodeFromCamera: 影片未準備好或未在掃描狀態");
+            return; // 確保 video 已有實際尺寸
+        }
+
+        const video = videoRef.current;
+        const canvas = canvasRef.current;
+        const context = canvas.getContext('2d');
+
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        
+        // 確保 video 元素有數據，且尺寸正確
+        if (canvas.width === 0 || canvas.height === 0) {
+            console.warn("Canvas 尺寸為零，無法繪製影片。");
+            return;
+        }
+
+        try {
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+            
+            // 嘗試使用 jsQR 解碼
+            const code = jsQR(imageData.data, imageData.width, imageData.height); // 移除 inversionAttempts
+            
+            if (code) {
+                // 成功解碼
+                setDecodedText(code.data);
+                sendMessage(`掃描成功：${code.data}`, 'success');
+                stopCamera(); // 掃描成功後停止攝影機
+
+                // 導航到書籍詳情頁面，並傳遞掃描到的識別碼 (ISBN)
+                setCurrentPage({ name: 'book_detail', params: { identifier: code.data } });
+            } else {
+                // 未找到 QR Code，在掃描中顯示提示，但不要頻繁覆蓋重要訊息
+                // 如果當前沒有成功或錯誤訊息，則顯示 "正在掃描..."
+                if (messageType !== 'success' && messageType !== 'error') {
+                    setMessage('正在掃描... 請將 QR Code 置於框內');
+                    setMessageType('info');
+                }
+                setDecodedText(''); // 清空上次的掃描結果
+            }
+        } catch (e) {
+            console.error("處理影片幀或解碼 QR Code 時發生錯誤:", e);
+            // 可以在這裡選擇是否顯示錯誤訊息給使用者
+            // sendMessage('掃描時發生內部錯誤。', 'error');
+            setDecodedText('');
+        }
+    }, [scanning, sendMessage, stopCamera, setCurrentPage, messageType]); // 將 messageType 加入依賴
+
+    // 組件載入時獲取可用攝影機設備列表
+    useEffect(() => {
+        const getCameras = async () => {
+            try {
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const videoDevices = devices.filter(device => device.kind === 'videoinput');
+                setCameras(videoDevices);
+                if (videoDevices.length > 0) {
+                    // 預設選擇第一個找到的攝影機
+                    setSelectedCameraId(videoDevices[0].deviceId); 
+                } else {
+                    sendMessage('未找到任何攝影機設備', 'error');
+                }
+            } catch (err) {
+                console.error("無法列舉攝影機設備:", err);
+                sendMessage('無法獲取攝影機列表，請確保允許訪問媒體設備。', 'error');
+            }
+        };
+
+        getCameras();
+
+        // 組件載入時檢查用戶登入狀態
+        if (!currentUser || !currentUser.id) { // 檢查 currentUser 是否存在且有 ID
+            setCurrentPage('login');
+            return; // 阻止繼續執行組件邏輯
+        }
+
+        // 當組件卸載時，停止攝影機和清除定時器
+        return () => {
+            stopCamera(); 
+        };
+    }, [currentUser, setCurrentPage, sendMessage, stopCamera]); 
+
+    // 如果用戶未登入或沒有 ID，則不渲染頁面內容
+    if (!currentUser || !currentUser.id) { // 檢查 currentUser 是否存在且有 ID
+        return null;
+    }
+
+    return (
+        <div className="container mx-auto p-4 max-w-md">
+            <h2 className="text-2xl font-bold mb-4 text-center">快速掃描 QR Code</h2>
+
+            <MessageDisplay message={message} type={messageType} />
+
+            {/* 攝影機選擇下拉選單 */}
+            {cameras.length > 0 && (
+                <div className="mb-4 text-center">
+                    <label htmlFor="camera-select" className="block text-gray-700 text-sm font-semibold mb-2">選擇攝影機:</label>
+                    <select
+                        id="camera-select"
+                        value={selectedCameraId}
+                        onChange={(e) => setSelectedCameraId(e.target.value)}
+                        className="w-full p-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                        {cameras.map((camera) => (
+                            <option key={camera.deviceId} value={camera.deviceId}>
+                                {camera.label || `Camera ${camera.deviceId.substring(0, 8)}...`}
+                            </option>
+                        ))}
+                    </select>
+                </div>
+            )}
+            {cameras.length === 0 && (
+                <p className="text-red-500 text-center mb-4">沒有偵測到可用的攝影機。</p>
+            )}
+
+            <div className="mb-4 relative border-2 border-gray-300 rounded-lg overflow-hidden bg-gray-200 flex justify-center items-center" style={{ height: '300px' }}> {/* 固定高度方便佈局 */}
+                {/* 攝影機視訊流 */}
+                <video ref={videoRef} autoPlay playsInline muted className="absolute top-0 left-0 w-full h-full object-cover"></video>
+                {/* 隱藏的 Canvas 用於捕獲圖像 */}
+                <canvas ref={canvasRef} className="hidden"></canvas>
+                {/* 掃描框疊加層 */}
+                {scanning && (
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 border-4 border-green-400 w-3/4 h-3/4 rounded-lg pointer-events-none z-10 animate-pulse"></div>
+                )}
+                {!scanning && (
+                    <p className="text-gray-500 text-lg z-0">點擊「啟動掃描」開始</p>
+                )}
+            </div>
+
+            <div className="flex justify-center space-x-4 mb-4">
+                {!scanning ? (
+                    <button
+                        onClick={startCamera}
+                        className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        disabled={!selectedCameraId} // 如果沒有選中的攝影機，禁用按鈕
+                    >
+                        啟動掃描
+                    </button>
+                ) : (
+                    <button
+                        onClick={stopCamera}
+                        className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+                    >
+                        停止掃描
+                    </button>
+                )}
+            </div>
+
+            {decodedText && (
+                <div className="mt-4 p-4 bg-gray-200 rounded-lg text-center">
+                    <h3 className="text-lg font-semibold">最新掃描結果：</h3>
+                    <p className="break-words font-mono text-blue-700">{decodedText}</p>
+                    <p className="text-sm text-gray-600 mt-2">已自動跳轉至書籍詳情頁面。</p>
+                </div>
+            )}
+
+            <div className="flex justify-center mt-4">
+              <button
+                  onClick={() => setCurrentPage('user_home')}
+                  className="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-500"
+              >
+                  返回個人主頁
+              </button>
+            </div>
+        </div>
+    );
 };
 
 
@@ -1592,6 +1857,11 @@ function App() {
             return <BookEdit setCurrentPage={setCurrentPage} bookId={currentPage.params.bookId} />;
           }
           return <Home setCurrentPage={setCurrentPage} />;
+        case 'book_detail': // 新增：處理從 QuickScanPage 跳轉過來的書籍詳情頁面
+          if (currentPage.params && currentPage.params.identifier) {
+            return <BookDetail setCurrentPage={setCurrentPage} identifier={currentPage.params.identifier} />;
+          }
+          return <BookList setCurrentPage={setCurrentPage} />; // 如果沒有識別碼，返回書籍列表
         default:
           // 如果物件中的名稱沒有匹配，則回到 home
           return <Home setCurrentPage={setCurrentPage} />;
@@ -1629,7 +1899,7 @@ function App() {
           return <QuickScanPage setCurrentPage={setCurrentPage} />;
         }
         return <Login setCurrentPage={setCurrentPage} />;
-      default:
+      default: // 預設頁面
         return <Home setCurrentPage={setCurrentPage} />;
     }
   };
