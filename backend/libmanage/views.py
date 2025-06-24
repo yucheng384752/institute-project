@@ -66,7 +66,10 @@ def register_api(request):
             username=account,
             password=make_password(password)
         )
-        return JsonResponse({'message': '註冊成功', 'user_id': new_user.id, 'username': new_user.username}, status=201)
+        return JsonResponse({
+            'message': '註冊成功', 
+            'user_id': new_user.id, 
+            'username': new_user.username}, status=201)
     except Exception as e:
         return error_response(f'註冊失敗：{str(e)}', status=500)
 
@@ -155,7 +158,7 @@ def user_home_api(request):
 
 @require_http_methods(["GET"]) # 使用 GET 請求
 def book_list_api(request):
-    # 從資料庫中獲取所有書籍，包含 category 和 status 欄位
+    # 從資料庫中獲取所有書籍的資訊
     books = Book.objects.all().values('id', 'title', 'author', 'isbn', 'is_borrowed', 'category', 'status')
     return JsonResponse({'books': list(books)}, status=200)
 
@@ -167,8 +170,8 @@ def book_create_api(request):
         title = data.get('title')
         author = data.get('author')
         isbn = data.get('isbn')
-        category = data.get('category', 'OTHER') # 新增 category 欄位，提供預設值
-        status = data.get('status', 'AVAILABLE') # 新增 status 欄位，提供預設值
+        category = data.get('category', 'OTHER') 
+        status = data.get('status', 'AVAILABLE') 
     except json.JSONDecodeError:
         return error_response('Invalid JSON', status=400)
 
@@ -177,10 +180,9 @@ def book_create_api(request):
     
     # 檢查 ISBN 是否重複
     if Book.objects.filter(isbn=isbn).exists():
-        return error_response('ISBN 已存在，請輸入獨特的 ISBN', status=409)
+        return error_response('ISBN 已存在，請確認ISBN 是否有誤。', status=409)
 
     try:
-        # 在創建書籍時包含 status 欄位
         new_book = Book.objects.create(title=title, author=author, isbn=isbn, category=category, status=status)
         return JsonResponse({'message': '書籍新增成功', 'book_id': new_book.id}, status=201)
     except Exception as e:
@@ -193,8 +195,8 @@ def book_delete_api(request, book_id):
         book = get_object_or_404(Book, id=book_id)
         # 檢查書籍是否被借出或有其他狀態，如果被借出則不能刪除
         if book.is_borrowed:
-            return error_response('此書已被借出，無法刪除。請先歸還。', status=409)
-        # 也可以根據 status 判斷是否可刪除
+            return error_response('此書已被借出，無法刪除。', status=409)
+        # 根據 status 判斷是否可刪除
         if book.status == 'DAMAGED' or book.status == 'LOST':
              # 允許刪除損壞或遺失的書籍
              pass
@@ -260,7 +262,7 @@ def return_book_api(request, record_id):
         record.return_date = timezone.now()
         record.book.is_borrowed = False
         
-        # 歸還後將書籍狀態設為 AVAILABLE，除非它原本是損壞或遺失
+        # 歸還後將書籍狀態設為 AVAILABLE，除非原本是損壞或遺失
         if record.book.status not in ['DAMAGED', 'LOST']: # 不修改已損壞或遺失的狀態
              record.book.status = 'AVAILABLE'
         
@@ -272,10 +274,10 @@ def return_book_api(request, record_id):
         return error_response(f'歸還失敗：{str(e)}', status=500)
 
 @csrf_exempt
-@require_http_methods(["PUT", "POST"]) # 編輯操作通常使用 PUT
+@require_http_methods(["PUT", "POST"])
 def update_book_api(request, book_id):
     """
-    更新單本書籍的所有詳細資訊（書名、作者、ISBN、分類、狀態）。
+    更新單本書籍的所有資訊（書名、作者、ISBN、分類、狀態）。
     """
     try:
         book = get_object_or_404(Book, id=book_id)
@@ -285,7 +287,7 @@ def update_book_api(request, book_id):
         author = data.get('author')
         isbn = data.get('isbn')
         category = data.get('category')
-        status = data.get('status') # 獲取 status 欄位
+        status = data.get('status')
 
         if not all([title, author, isbn, category, status]): # 檢查所有必填欄位
             return error_response('書名、作者、ISBN、分類、狀態均為必填', status=400)
@@ -298,7 +300,7 @@ def update_book_api(request, book_id):
         book.author = author
         book.isbn = isbn
         book.category = category
-        book.status = status # 更新 status 欄位
+        book.status = status
         book.save()
 
         return JsonResponse({'message': f'書籍 "{book.title}" 更新成功！'}, status=200)
@@ -311,7 +313,7 @@ def update_book_api(request, book_id):
         return error_response(f'更新書籍過程中發生錯誤：{str(e)}', status=500)
 
 @csrf_exempt
-@require_http_methods(["PUT"]) # 新增一個專門用於更新書籍狀態的API
+@require_http_methods(["PUT"]) # 專門用於更新書籍狀態的API
 def update_book_status_api(request, book_id):
     """
     僅更新單本書籍的狀態。使用 PUT 請求。
@@ -342,7 +344,7 @@ def update_book_status_api(request, book_id):
         return error_response(f'更新書籍狀態時發生錯誤：{str(e)}', status=500)
 
 
-@require_http_methods(["GET"]) # 新增一個獲取單本書籍資訊的API
+@require_http_methods(["GET"]) # 獲取單本書籍資訊的API
 def book_detail_api(request, book_id):
     try:
         book = get_object_or_404(Book, id=book_id)
@@ -353,7 +355,7 @@ def book_detail_api(request, book_id):
             'isbn': book.isbn,
             'is_borrowed': book.is_borrowed,
             'category': book.category,
-            'status': book.status, # 包含 status 欄位
+            'status': book.status,
         }
         return JsonResponse({'book': book_data}, status=200)
     except Book.DoesNotExist:
@@ -363,7 +365,7 @@ def book_detail_api(request, book_id):
 
 
 @csrf_exempt
-@require_http_methods(["POST"]) # 可以考慮使用 PUT 請求 
+@require_http_methods(["POST"]) 
 def scan_code_api(request):
     try:
         data = json.loads(request.body)

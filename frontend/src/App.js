@@ -1,8 +1,6 @@
 import React, { useState, useEffect, createContext, useContext, useCallback, useRef } from 'react';
 
-// ----------------------------------------------------
 // AuthContext: 用於管理全局使用者狀態
-// ----------------------------------------------------
 export const AuthContext = createContext(null);
 
 // 定義書籍分類選項 (與 Django models.py 中的 CATEGORY_CHOICES 保持一致)
@@ -26,9 +24,7 @@ const STATUS_OPTIONS = [
 ];
 
 
-// ----------------------------------------------------
-// MessageDisplay: 訊息顯示組件 (已包含 Tailwind 樣式)  
-// ----------------------------------------------------
+// MessageDisplay: 訊息顯示組件  
 const MessageDisplay = ({ message, type }) => {
   if (!message) return null;
   return (
@@ -38,9 +34,7 @@ const MessageDisplay = ({ message, type }) => {
   );
 };
 
-// ----------------------------------------------------
 // Header: 應用程式頂部導航欄 (新增下拉選單和快速掃描按鈕)
-// ----------------------------------------------------
 const Header = ({ setCurrentPage, currentUser, logoutUser }) => {
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
@@ -166,9 +160,8 @@ const Home = ({ setCurrentPage }) => {
   );
 };
 
-// ----------------------------------------------------
-// Login: 登入組件 (已更新 Tailwind 樣式)
-// ----------------------------------------------------
+
+// Login: 登入組件 
 const Login = ({ setCurrentPage }) => {
   const { loginUser } = useContext(AuthContext);
   const [username, setUsername] = useState('');
@@ -251,9 +244,7 @@ const Login = ({ setCurrentPage }) => {
   );
 };
 
-// ----------------------------------------------------
-// Register: 註冊組件 (已更新 Tailwind 樣式)
-// ----------------------------------------------------
+// Register: 註冊組件 
 const Register = ({ setCurrentPage }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -278,7 +269,7 @@ const Register = ({ setCurrentPage }) => {
       if (response.ok) {
         setMessage(data.message);
         setMessageType('success');
-        // 註冊成功後可以自動跳轉到登入頁面
+        // 註冊成功後自動跳轉到登入頁面
         setTimeout(() => setCurrentPage('login'), 1500);
       } else {
         setMessage(data.message || '註冊失敗');
@@ -335,11 +326,9 @@ const Register = ({ setCurrentPage }) => {
   );
 };
 
-// ----------------------------------------------------
-// UserHome: 用戶主頁 (借還書紀錄) (已更新 Tailwind 樣式)
-// ----------------------------------------------------
+// UserHome: 用戶主頁 (借還書紀錄)
 const UserHome = ({ setCurrentPage }) => {
-  const { currentUser, logoutUser } = useContext(AuthContext);
+  const { currentUser } = useContext(AuthContext);
   const [borrowedBooks, setBorrowedBooks] = useState([]);
   const [message, setMessage] = useState(null);
   const [messageType, setMessageType] = useState('');
@@ -471,9 +460,7 @@ const UserHome = ({ setCurrentPage }) => {
   );
 };
 
-// ----------------------------------------------------
-// BookList: 館藏查詢 (已更新 Tailwind 樣式)
-// ----------------------------------------------------
+// BookList: 館藏查詢
 const BookList = ({ setCurrentPage }) => {
   const { currentUser } = useContext(AuthContext);
   const [books, setBooks] = useState([]);
@@ -724,16 +711,14 @@ const BookList = ({ setCurrentPage }) => {
   );
 };
 
-// ----------------------------------------------------
-// BookCreate: 新增書籍 (管理員專用) (已更新 Tailwind 樣式，並新增分類)
-// ----------------------------------------------------
+// BookCreate: 新增書籍 
 const BookCreate = ({ setCurrentPage }) => {
   const { currentUser } = useContext(AuthContext);
   const [title, setTitle] = useState('');
   const [author, setAuthor] = useState('');
   const [isbn, setIsbn] = useState('');
   const [category, setCategory] = useState(CATEGORY_OPTIONS[0].value);
-  const [status, setStatus] = useState(STATUS_OPTIONS[0].value); // 新增 status 狀態
+  const [status, setStatus] = useState(STATUS_OPTIONS[0].value);
   const [message, setMessage] = useState(null);
   const [messageType, setMessageType] = useState('');
 
@@ -749,7 +734,7 @@ const BookCreate = ({ setCurrentPage }) => {
     e.preventDefault();
     setMessage(null);
 
-    if (!title || !author || !isbn || !category || !status) { // 檢查所有欄位
+    if (!title || !author || !isbn || !category || !status) { // 檢查所有欄位是否都填寫
       setMessage('請填寫所有欄位');
       setMessageType('error');
       return;
@@ -761,7 +746,7 @@ const BookCreate = ({ setCurrentPage }) => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ title, author, isbn, category, status }), // 傳送 category 和 status
+        body: JSON.stringify({ title, author, isbn, category, status }),
       });
       const data = await response.json();
 
@@ -888,16 +873,14 @@ const BookCreate = ({ setCurrentPage }) => {
 };
 
 
-// ----------------------------------------------------
-// BookEdit: 編輯書籍 (新增元件)
-// ----------------------------------------------------
+// BookEdit: 編輯書籍 
 const BookEdit = ({ setCurrentPage, bookId }) => {
   const { currentUser } = useContext(AuthContext);
   const [title, setTitle] = useState('');
   const [author, setAuthor] = useState('');
   const [isbn, setIsbn] = useState('');
   const [category, setCategory] = useState(CATEGORY_OPTIONS[0].value);
-  const [status, setStatus] = useState(STATUS_OPTIONS[0].value); // 新增 status 狀態
+  const [status, setStatus] = useState(STATUS_OPTIONS[0].value);
   const [message, setMessage] = useState(null);
   const [messageType, setMessageType] = useState('');
   const [loading, setLoading] = useState(true);
@@ -927,7 +910,7 @@ const BookEdit = ({ setCurrentPage, bookId }) => {
           setAuthor(data.book.author);
           setIsbn(data.book.isbn);
           setCategory(data.book.category || CATEGORY_OPTIONS[0].value);
-          setStatus(data.book.status || STATUS_OPTIONS[0].value); // 設置狀態
+          setStatus(data.book.status || STATUS_OPTIONS[0].value); 
         } else {
           setMessage(data.message || '無法載入書籍詳細資訊');
           setMessageType('error');
@@ -960,7 +943,7 @@ const BookEdit = ({ setCurrentPage, bookId }) => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ title, author, isbn, category, status }), // 傳送 status
+        body: JSON.stringify({ title, author, isbn, category, status }), 
       });
       const data = await response.json();
 
@@ -1087,26 +1070,23 @@ const BookEdit = ({ setCurrentPage, bookId }) => {
 };
 
 
-// ----------------------------------------------------
-// EditProfile: 使用者更改資訊組件 (新增)
-// ----------------------------------------------------
+// EditProfile: 使用者更改資訊組件
 const EditProfile = ({ setCurrentPage }) => {
   const { currentUser } = useContext(AuthContext);
-  const [currentUsername, setCurrentUsername] = useState(''); // 假設用戶名可顯示
+  const [currentUsername, setCurrentUsername] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [message, setMessage] = useState(null);
   const [messageType, setMessageType] = useState('');
   const [loading, setLoading] = useState(true);
 
-  // 初次加載時獲取用戶資訊 (目前只顯示用戶名)
+  // 初次載入時只顯示用戶名
   useEffect(() => {
     if (!currentUser.id) {
       setCurrentPage('login'); // 未登入則跳轉登入
       return;
     }
-    // 在這裡可以發送 API 請求獲取更多用戶詳細資訊，例如 email, phone 等
-    // 目前我們只使用 currentUser.username
+    
     setCurrentUsername(currentUser.username);
     setLoading(false); // 設置為不載入
   }, [currentUser.id, currentUser.username, setCurrentPage]);
@@ -1134,7 +1114,7 @@ const EditProfile = ({ setCurrentPage }) => {
       return;
     }
 
-    // 可以在這裡添加密碼複雜度檢查 (例如：長度、包含數字/字母)
+    // 添加密碼複雜度檢查
     if (newPassword.length < 6) {
       setMessage('密碼長度至少為 6 個字元。');
       setMessageType('error');
@@ -1142,17 +1122,15 @@ const EditProfile = ({ setCurrentPage }) => {
     }
 
     try {
-      // 調用後端 API 更新用戶資訊 (例如，只更新密碼)
+      // 調用後端 API 更新用戶資訊 
       const response = await fetch('/api/user/update_profile/', {
         method: 'POST', // 或 PUT
         headers: {
           'Content-Type': 'application/json',
-          // 這裡可能需要您的認證 Token (例如 JWT)
-          // 'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
         body: JSON.stringify({
           user_id: currentUser.id, // 傳遞用戶 ID
-          username: currentUser.username, // 傳遞用戶名 (可選，但方便後端查找)
+          username: currentUser.username, // 傳遞用戶名 
           new_password: newPassword,
         }),
       });
@@ -1164,8 +1142,7 @@ const EditProfile = ({ setCurrentPage }) => {
         setMessageType('success');
         setNewPassword('');
         setConfirmPassword('');
-        // 成功後可以考慮跳轉回用戶主頁
-        // setTimeout(() => setCurrentPage('user_home'), 1500);
+        setTimeout(() => setCurrentPage('user_home'), 1500);
       } else {
         setMessage(data.message || '更新失敗。');
         setMessageType('error');
@@ -1233,9 +1210,7 @@ const EditProfile = ({ setCurrentPage }) => {
   );
 };
 
-// ----------------------------------------------------
-// ScannedBarcodeDisplay: 顯示掃描圖像及紅色框標示 (新組件)
-// ----------------------------------------------------
+// ScannedBarcodeDisplay: 顯示掃描圖像及紅色框標示 
 const ScannedBarcodeDisplay = ({ imageDataUrl, boundingBox }) => {
   const canvasRef = useRef(null);
 
@@ -1252,8 +1227,8 @@ const ScannedBarcodeDisplay = ({ imageDataUrl, boundingBox }) => {
       context.drawImage(image, 0, 0); // 繪製圖像
 
       if (boundingBox) {
-        context.strokeStyle = 'red'; // 紅色框
-        context.lineWidth = 4;        // 框線寬度
+        context.strokeStyle = 'red'; 
+        context.lineWidth = 4;        // 線寬
         // 繪製矩形框
         context.strokeRect(boundingBox.x, boundingBox.y, boundingBox.width, boundingBox.height);
       }
@@ -1276,10 +1251,8 @@ const ScannedBarcodeDisplay = ({ imageDataUrl, boundingBox }) => {
 };
 
 
-// ----------------------------------------------------
-// BarcodeScanner: 條碼/QR Code 掃描組件 (新增)
+// BarcodeScanner: 條碼/QR Code 掃描組件
 // 負責攝影機串流、圖像捕獲和發送到後端
-// ----------------------------------------------------
 const BarcodeScanner = ({ onScanResult, onError, scanningIntent }) => {
   const videoRef = useRef(null);
   const canvasRef = useRef(null); // 用於捕獲圖像的隱藏 canvas
@@ -1289,7 +1262,7 @@ const BarcodeScanner = ({ onScanResult, onError, scanningIntent }) => {
 
   const startScan = async () => {
     try {
-      // 請求訪問使用者媒體設備 (視訊)
+      // 請求訪問使用者媒體設備 
       const mediaStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } }); // 優先使用後置攝影機
       videoRef.current.srcObject = mediaStream;
       setStream(mediaStream);
@@ -1396,10 +1369,8 @@ const BarcodeScanner = ({ onScanResult, onError, scanningIntent }) => {
   );
 };
 
-// ----------------------------------------------------
-// QuickScanPage: 快速掃描頁面 (新增)
+// QuickScanPage: 快速掃描頁面
 // 整合 BarcodeScanner，並處理掃描結果
-// ----------------------------------------------------
 const QuickScanPage = ({ setCurrentPage }) => {
   const { currentUser } = useContext(AuthContext);
   const [scanResult, setScanResult] = useState('');
