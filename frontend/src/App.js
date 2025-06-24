@@ -8,7 +8,7 @@ export const AuthContext = createContext(null);
 // 定義書籍分類選項 (與 Django models.py 中的 CATEGORY_CHOICES 保持一致)
 const CATEGORY_OPTIONS = [
   { value: 'SCIENCE', label: '科學' },
-  { value: 'LANGUAGE', label: '語言' },
+  { value: 'LANGUAGE', 'label': '語言' },
   { value: 'HISTORY', label: '歷史' },
   { value: 'FICTION', label: '小說' },
   { value: 'ENGINEERING', label: '工程' },
@@ -1583,18 +1583,37 @@ const QuickScanPage = ({ setCurrentPage }) => {
             });
             if (videoRef.current) {
                 videoRef.current.srcObject = stream;
+                
+                // 優先使用 oncanplay 事件，這在 videoWidth/Height 準備好時觸發
+                videoRef.current.oncanplay = () => { 
+                    console.log("Video oncanplay event fired.");
+                    // 等待一小段時間確保 videoWidth/Height 穩定
+                    setTimeout(() => {
+                        if (videoRef.current && videoRef.current.videoWidth > 0 && videoRef.current.videoHeight > 0) {
+                            videoRef.current.play();
+                            setScanning(true);
+                            sendMessage('攝影機已啟動，正在掃描... 請將 QR Code 置於框內', 'info'); // 初始提示
+                            // 啟動定期掃描，獲取圖像並嘗試解碼
+                            scanIntervalRef.current = setInterval(decodeQRCodeFromCamera, 200); // 掃描頻率改為 200ms
+                            console.log(`Video dimensions set: ${videoRef.current.videoWidth}x${videoRef.current.videoHeight}`);
+                        } else {
+                            sendMessage('無法獲取攝影機影片串流的尺寸，請檢查攝影機或重新整理頁面。', 'error');
+                            setScanning(false);
+                            console.error("Video dimensions are 0 after oncanplay and setTimeout.");
+                        }
+                    }, 50); // 增加 50ms 延遲
+                };
+
+                // Fallback for cases where oncanplay might not be enough
                 videoRef.current.onloadedmetadata = () => {
-                    // 確保影片數據已完全載入並可播放
-                    if (videoRef.current.readyState >= 2) { // READY_STATE.HAVE_CURRENT_DATA or higher
+                    console.log("Video onloadedmetadata event fired (fallback).");
+                    if (videoRef.current && videoRef.current.videoWidth > 0 && videoRef.current.videoHeight > 0 && !scanning) {
+                        // Only try to start scanning if oncanplay hasn't already done so
                         videoRef.current.play();
                         setScanning(true);
-                        sendMessage('攝影機已啟動，正在掃描...', 'success');
-                        // 啟動定期掃描，獲取圖像並嘗試解碼
-                        scanIntervalRef.current = setInterval(decodeQRCodeFromCamera, 500); // 每 500 毫秒掃描一次
-                    } else {
-                        // 如果影片還未準備好，可以嘗試等待或發出警告
-                        sendMessage('攝影機影片尚未準備好，請稍候...', 'info');
-                        // 這裡可以考慮增加一個延遲後重試 onloadedmetadata 的邏輯
+                        sendMessage('攝影機已啟動，正在掃描... 請將 QR Code 置於框內', 'info');
+                        scanIntervalRef.current = setInterval(decodeQRCodeFromCamera, 200);
+                        console.log(`Video dimensions set (fallback): ${videoRef.current.videoWidth}x${videoRef.current.videoHeight}`);
                     }
                 };
             }
@@ -1606,7 +1625,10 @@ const QuickScanPage = ({ setCurrentPage }) => {
                 sendMessage('無法啟動攝影機：找不到可用的攝影機。', 'error');
             } else if (err.name === "NotReadableError") {
                 sendMessage('無法啟動攝影機：攝影機可能正在被其他應用程式使用。', 'error');
-            } else {
+            } else if (err.name === "OverconstrainedError") {
+                sendMessage('無法啟動攝影機：請求的攝影機解析度或設定不受支援。', 'error');
+            }
+            else {
                 sendMessage(`無法啟動攝影機：${err.message || '未知錯誤'}`, 'error');
             }
             setScanning(false);
@@ -1631,10 +1653,11 @@ const QuickScanPage = ({ setCurrentPage }) => {
     }, [sendMessage]); 
 
     // 前端直接解碼 QR Code
-    const decodeQRCodeFromCamera = useCallback(() => { // 將 decodeQRCodeFromCamera 包裹在 useCallback 中
-        if (!scanning || !videoRef.current || !canvasRef.current || videoRef.current.videoWidth === 0) {
-            console.log("decodeQRCodeFromCamera: 影片未準備好或未在掃描狀態");
-            return; // 確保 video 已有實際尺寸
+    const decodeQRCodeFromCamera = useCallback(() => { 
+        if (!scanning || !videoRef.current || !canvasRef.current || videoRef.current.videoWidth === 0 || videoRef.current.videoHeight === 0) {
+            // console.log("decodeQRCodeFromCamera: 影片未準備好或未在掃描狀態 (videoWidth/Height is 0)");
+            // 不要在這裡發送用戶可見的訊息，因為這會頻繁觸發
+            return; 
         }
 
         const video = videoRef.current;
@@ -1644,18 +1667,11 @@ const QuickScanPage = ({ setCurrentPage }) => {
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
         
-        // 確保 video 元素有數據，且尺寸正確
-        if (canvas.width === 0 || canvas.height === 0) {
-            console.warn("Canvas 尺寸為零，無法繪製影片。");
-            return;
-        }
-
         try {
             context.drawImage(video, 0, 0, canvas.width, canvas.height);
             const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
             
-            // 嘗試使用 jsQR 解碼
-            const code = jsQR(imageData.data, imageData.width, imageData.height); // 移除 inversionAttempts
+            const code = jsQR(imageData.data, imageData.width, imageData.height); 
             
             if (code) {
                 // 成功解碼
@@ -1666,21 +1682,15 @@ const QuickScanPage = ({ setCurrentPage }) => {
                 // 導航到書籍詳情頁面，並傳遞掃描到的識別碼 (ISBN)
                 setCurrentPage({ name: 'book_detail', params: { identifier: code.data } });
             } else {
-                // 未找到 QR Code，在掃描中顯示提示，但不要頻繁覆蓋重要訊息
-                // 如果當前沒有成功或錯誤訊息，則顯示 "正在掃描..."
-                if (messageType !== 'success' && messageType !== 'error') {
-                    setMessage('正在掃描... 請將 QR Code 置於框內');
-                    setMessageType('info');
-                }
+                // 未找到 QR Code，保持掃描提示，不發送錯誤訊息
                 setDecodedText(''); // 清空上次的掃描結果
             }
         } catch (e) {
             console.error("處理影片幀或解碼 QR Code 時發生錯誤:", e);
-            // 可以在這裡選擇是否顯示錯誤訊息給使用者
-            // sendMessage('掃描時發生內部錯誤。', 'error');
+            sendMessage('掃描時發生內部錯誤。', 'error'); // 僅在實際錯誤發生時顯示
             setDecodedText('');
         }
-    }, [scanning, sendMessage, stopCamera, setCurrentPage, messageType]); // 將 messageType 加入依賴
+    }, [scanning, sendMessage, stopCamera, setCurrentPage]); 
 
     // 組件載入時獲取可用攝影機設備列表
     useEffect(() => {
@@ -1789,7 +1799,7 @@ const QuickScanPage = ({ setCurrentPage }) => {
                 </div>
             )}
 
-            <div className="flex justify-center mt-4">
+            <div className="flex justify-center mt-4"> {/* 修正了按鈕對齊問題 */}
               <button
                   onClick={() => setCurrentPage('user_home')}
                   className="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-500"
