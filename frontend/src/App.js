@@ -1541,27 +1541,20 @@ const QuickScanPage = ({ setCurrentPage }) => {
   const [decodedText, setDecodedText] = useState('');
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState('');
-  const [scanning, setScanning] = useState(false); 
+  const [scanning, setScanning] = useState(false);
   const messageTimeoutRef = useRef(null);
-  const [qrDetected, setQrDetected] = useState(false); 
-  const [scanAnimation, setScanAnimation] = useState(false); 
-
-  // 使用 useRef 儲存 Html5Qrcode 實例，確保在組件生命週期內只創建一次
-  const html5QrcodeRef = useRef(null); 
-  // 使用 useRef 儲存 Html5QrcodeScanner 的元素 ID
+  const [qrDetected, setQrDetected] = useState(false);
+  const [scanAnimation, setScanAnimation] = useState(false);
+  const html5QrcodeRef = useRef(null);
   const scannerId = "reader";
-
   const { currentUser } = useContext(AuthContext);
 
-  // 觸發掃描成功動畫
   const triggerScanAnimation = useCallback(() => {
     setScanAnimation(true);
-    setTimeout(() => setScanAnimation(false), 1000); // 1秒後重置動畫
+    setTimeout(() => setScanAnimation(false), 1000);
   }, []);
 
-  // 發送訊息的輔助函式
   const sendMessage = useCallback((msg, type) => {
-    console.log(`訊息 (${type.toUpperCase()}): ${msg}`);
     setMessage(msg);
     setMessageType(type);
     if (messageTimeoutRef.current) clearTimeout(messageTimeoutRef.current);
@@ -1571,254 +1564,155 @@ const QuickScanPage = ({ setCurrentPage }) => {
     }, 3000);
   }, []);
 
-  // 停止攝影機功能 (針對 html5-qrcode)
+  // 修正版 stopScanner
   const stopScanner = useCallback(async () => {
-    if (html5QrcodeRef.current && scanning) { // 檢查是否正在掃描
-      console.log("停止掃描器中...");
+    if (html5QrcodeRef.current) {
       try {
-        await html5QrcodeRef.current.stop();
-        console.log("掃描器已停止。");
-        sendMessage('掃描器已停止', 'info');
+        if (scanning) {
+          await html5QrcodeRef.current.stop();
+        }
       } catch (err) {
-        console.error("停止掃描器失敗:", err);
-        // 如果是 'NotStartedException' 或 'QR scanning currently in progress' 則不顯示錯誤
-        if (!err.message.includes("NotStartedException") && !err.message.includes("QR scanning currently in progress") && !err.message.includes("is not started")) {
-            sendMessage('停止掃描器失敗', 'error');
-        }
-      } finally {
-        setScanning(false);
-        setQrDetected(false); // 重置偵測狀態
-        setDecodedText(''); // 清空解碼文本
+        // 可忽略的錯誤
+        console.warn("停止掃描器失敗（可忽略）:", err);
       }
-    } else if (html5QrcodeRef.current && !scanning) {
-        // 如果掃描器實例存在但沒有在掃描狀態，也嘗試清理，防止 DOM 殘留
-        console.log("掃描器未處於掃描狀態，嘗試額外清理...");
-        try {
-            // 使用 clear() 方法來清理 DOM 元素，而不是 stop()
-            await html5QrcodeRef.current.clear(); 
-            console.log("掃描器已清理。");
-        } catch (err) {
-            console.warn("清理掃描器時發生錯誤:", err);
-        }
-        setScanning(false);
-        setQrDetected(false);
-        setDecodedText('');
+      try {
+        await html5QrcodeRef.current.clear();
+      } catch (err) {
+        // DOM 已被移除時的錯誤
+        console.warn("清理掃描器失敗（可忽略）:", err);
+      }
+      setScanning(false);
+      setQrDetected(false);
+      setDecodedText('');
     }
-  }, [scanning, sendMessage]);
+  }, [scanning]);
 
-
-  // 掃描成功回呼函式
   const onScanSuccess = useCallback((decodedResult) => {
-    console.log(`HTML5-QRCODE: 掃描成功, 結果: ${decodedResult}`);
     setDecodedText(decodedResult);
     sendMessage(`🎉 掃描成功！ISBN: ${decodedResult}`, 'success');
-    setQrDetected(true); // 標記為偵測到
-    triggerScanAnimation(); // 觸發動畫
-
-    // 成功掃描後自動跳轉
+    setQrDetected(true);
+    triggerScanAnimation();
     setTimeout(() => {
-      stopScanner(); // 先停止掃描器
+      stopScanner();
       setCurrentPage({ name: 'book_detail', params: { identifier: decodedResult } });
     }, 1500);
-
   }, [sendMessage, setCurrentPage, stopScanner, triggerScanAnimation]);
 
-  // 掃描錯誤回呼函式
   const onScanError = useCallback((errorMessage) => {
-    // 這裡可以選擇性地顯示錯誤，但為了不干擾使用者，通常只在偵測到但無法解碼時顯示
-    // 避免頻繁更新訊息
-    if (!qrDetected) { // 如果沒有偵測到 QR Code (或已重置)
-        // 僅當錯誤訊息非持續性錯誤時才顯示，例如 'QR code not detected'
-        if (errorMessage.includes("QR code not detected")) {
-            // console.log("HTML5-QRCODE: 未偵測到 QR Code.");
-        } else {
-            // 對於其他較為嚴重的錯誤，如攝影機問題，才顯示給使用者
-            // 避免重複顯示相同的攝影機錯誤
-            if (!message.includes('攝影機遇到問題')) { 
-                sendMessage('攝影機遇到問題，請檢查權限或重試。', 'error');
-            }
-        }
+    if (!qrDetected) {
+      if (!errorMessage.includes("QR code not detected")) {
+        sendMessage('攝影機遇到問題，請檢查權限或重試。', 'error');
+      }
     }
-    setDecodedText(''); // 清空解碼文本
-    setQrDetected(false); // 重置偵測狀態
-  }, [sendMessage, message, qrDetected]);
+    setDecodedText('');
+    setQrDetected(false);
+  }, [sendMessage, qrDetected]);
 
-
-  // 初始化和清理 html5-qrcode 掃描器
   useEffect(() => {
-    if (!currentUser?.id) { // 確保使用者已登入
+    if (!currentUser?.id) {
       setCurrentPage('login');
       return;
     }
-
-    // 在組件掛載時創建 Html5Qrcode 實例
-    // 確保只創建一次
     if (!html5QrcodeRef.current) {
-        if (typeof Html5Qrcode === 'undefined') {
-            console.error('Html5Qrcode 庫尚未載入。');
-            sendMessage('初始化失敗：Html5Qrcode 庫未載入。', 'error');
-            return;
-        }
-        html5QrcodeRef.current = new Html5Qrcode(scannerId);
-        console.log("HTML5-QRCODE: Html5Qrcode 實例已創建。");
+      if (typeof Html5Qrcode === 'undefined') {
+        sendMessage('初始化失敗：Html5Qrcode 庫未載入。', 'error');
+        return;
+      }
+      html5QrcodeRef.current = new Html5Qrcode(scannerId);
     }
-
-    // 啟動掃描器
+    let isMounted = true;
     const startScannerAsync = async () => {
-        // 如果掃描器已經運行，則不再重複啟動
-        if (scanning) {
-            console.log("掃描器已在運行，跳過重新啟動。");
-            return;
+      if (scanning) return;
+      if (!html5QrcodeRef.current) {
+        sendMessage('QR Code 掃描器初始化失敗。', 'error');
+        return;
+      }
+      try {
+        await html5QrcodeRef.current.start(
+          { facingMode: "environment" },
+          { qrbox: { width: 250, height: 250 }, fps: 10, disableFlip: false },
+          onScanSuccess,
+          onScanError
+        );
+        if (isMounted) {
+          setScanning(true);
+          sendMessage('📷 攝影機已啟動！請將 QR Code 對準掃描框。', 'info');
         }
-
-        if (!html5QrcodeRef.current) {
-            console.error("HTML5-QRCODE: 掃描器實例不存在，無法啟動。");
-            sendMessage('QR Code 掃描器初始化失敗。', 'error');
-            return;
+      } catch (err) {
+        let errorMessage = '無法啟動攝影機：';
+        if (err.name === 'NotAllowedError') {
+          errorMessage += '您已拒絕攝影機權限。請點擊瀏覽器地址欄的攝影機圖標啟用權限，然後重新整理頁面。';
+        } else if (err.name === 'NotFoundError') {
+          errorMessage += '找不到可用的攝影機設備。';
+        } else if (err.name === 'NotReadableError') {
+          errorMessage += '攝影機可能正在被其他應用程式使用。請關閉其他應用程式後重試。';
+        } else {
+          errorMessage += err.message || '未知錯誤。';
         }
-
-        try {
-            console.log("HTML5-QRCODE: 嘗試啟動掃描器...");
-            await html5QrcodeRef.current.start(
-                { facingMode: "environment" }, // 優先使用後置攝影機
-                {
-                    qrbox: { width: 250, height: 250 }, // 掃描框大小
-                    fps: 10, // 每秒影格數
-                    disableFlip: false // 允許反轉掃描
-                },
-                onScanSuccess,
-                onScanError
-            );
-            setScanning(true); // 標記為正在掃描
-            sendMessage('📷 攝影機已啟動！請將 QR Code 對準掃描框。', 'info');
-            console.log("HTML5-QRCODE: 掃描器已成功啟動。");
-        } catch (err) {
-            console.error("HTML5-QRCODE: 啟動掃描器失敗:", err);
-            let errorMessage = '無法啟動攝影機：';
-            if (err.name === 'NotAllowedError') {
-                errorMessage += '您已拒絕攝影機權限。請點擊瀏覽器地址欄的攝影機圖標啟用權限，然後重新整理頁面。';
-            } else if (err.name === 'NotFoundError') {
-                errorMessage += '找不到可用的攝影機設備。';
-            } else if (err.name === 'NotReadableError') {
-                errorMessage += '攝影機可能正在被其他應用程式使用。請關閉其他應用程式後重試。';
-            } else {
-                errorMessage += err.message || '未知錯誤。';
-            }
-            sendMessage(errorMessage, 'error');
-            setScanning(false);
-        }
+        sendMessage(errorMessage, 'error');
+        setScanning(false);
+      }
     };
-    
-    startScannerAsync(); // 在組件掛載時立即啟動掃描器
-
-    // 清理函式：組件卸載時停止掃描器
+    startScannerAsync();
     return () => {
-        console.log("HTML5-QRCODE: QuickScanPage 組件卸載，執行清理。");
-        // 確保在組件卸載時調用停止掃描器
-        stopScanner(); 
-        if (messageTimeoutRef.current) {
-            clearTimeout(messageTimeoutRef.current);
-        }
-        // 不需要將 html5QrcodeRef.current 設為 null，因為 stop() 或 clear() 會處理底層 DOM
-        // 並且下次組件重新掛載時，ref.current 會被重用或重新賦值
+      isMounted = false;
+      stopScanner();
+      if (messageTimeoutRef.current) clearTimeout(messageTimeoutRef.current);
     };
-  }, [currentUser, setCurrentPage, sendMessage, onScanSuccess, onScanError, stopScanner, scanning]); // 確保依賴完整
+  }, [currentUser, setCurrentPage, sendMessage, onScanSuccess, onScanError, stopScanner, scanning]);
 
-  if (!currentUser?.id) {
-    return null; // 未登入不渲染組件
-  }
+  if (!currentUser?.id) return null;
 
   return (
     <div className="container mx-auto p-4 max-w-md">
       <h2 className="text-2xl font-bold mb-4 text-center">快速掃描 QR Code</h2>
-
       <MessageDisplay message={message} type={messageType} />
-
-      {/* html5-qrcode 掃描器將會渲染到這個 div 中 */}
       <div id={scannerId} className="w-full h-[300px] border-2 border-gray-300 rounded-lg overflow-hidden bg-gray-200 flex justify-center items-center relative">
-        {/* html5-qrcode 會自動插入 video 和 canvas */}
-        {/* 我們可以添加一個覆蓋層來顯示自定義的掃描框 */}
         {scanning && (
-            <div className={`absolute w-3/4 h-3/4 border-4 ${qrDetected ? 'border-green-500 animate-pulse' : 'border-gray-400'} rounded-lg z-10 pointer-events-none transition-colors duration-200`} />
+          <div className={`absolute w-3/4 h-3/4 border-4 ${qrDetected ? 'border-green-500 animate-pulse' : 'border-gray-400'} rounded-lg z-10 pointer-events-none transition-colors duration-200`} />
         )}
         {!scanning && (
-            <div className="text-center z-0">
-                <p className="text-gray-500 text-lg mb-2">攝影機準備中...</p>
-                <p className="text-gray-400 text-sm">請確保光線充足並將 QR Code 置於框內</p>
-            </div>
+          <div className="text-center z-0">
+            <p className="text-gray-500 text-lg mb-2">攝影機準備中...</p>
+            <p className="text-gray-400 text-sm">請確保光線充足並將 QR Code 置於框內</p>
+          </div>
         )}
       </div>
-
-      {/* 控制按鈕 */}
       <div className="flex justify-center gap-4 mt-4">
         {scanning ? (
-          <button
-            onClick={stopScanner}
-            className="bg-red-600 hover:bg-red-700 text-white py-2 px-6 rounded-lg"
-          >
-            停止掃描
-          </button>
+          <button onClick={stopScanner} className="bg-red-600 hover:bg-red-700 text-white py-2 px-6 rounded-lg">停止掃描</button>
         ) : (
           <button
-            // 當掃描器未啟動時，顯示「重新啟動掃描」
-            onClick={() => {
-                // 如果掃描器實例存在且未掃描，嘗試重新啟動
-                if (html5QrcodeRef.current && !scanning) {
-                    html5QrcodeRef.current.start(
-                        { facingMode: "environment" },
-                        { qrbox: { width: 250, height: 250 }, fps: 10, disableFlip: false },
-                        onScanSuccess,
-                        onScanError
-                    )
-                        .then(() => {
-                            setScanning(true);
-                            sendMessage('📷 攝影機已重新啟動！', 'info');
-                        })
-                        .catch((err) => {
-                            console.error("重新啟動掃描器失敗:", err);
-                            sendMessage('重新啟動攝影機失敗', 'error');
-                        });
-                } else if (!html5QrcodeRef.current && typeof Html5Qrcode === 'function') {
-                    // 如果實例不存在，但庫已載入，重新創建並啟動
-                    const newScanner = new Html5Qrcode(scannerId);
-                    html5QrcodeRef.current = newScanner;
-                    newScanner.start(
-                        { facingMode: "environment" },
-                        { qrbox: { width: 250, height: 250 }, fps: 10, disableFlip: false },
-                        onScanSuccess,
-                        onScanError
-                    )
-                        .then(() => {
-                            setScanning(true);
-                            sendMessage('📷 攝影機已重新啟動！', 'info');
-                        })
-                        .catch((err) => {
-                            console.error("重新創建並啟動掃描器失敗:", err);
-                            sendMessage('重新啟動攝影機失敗', 'error');
-                        });
+            onClick={async () => {
+              if (html5QrcodeRef.current && !scanning) {
+                try {
+                  await html5QrcodeRef.current.start(
+                    { facingMode: "environment" },
+                    { qrbox: { width: 250, height: 250 }, fps: 10, disableFlip: false },
+                    onScanSuccess,
+                    onScanError
+                  );
+                  setScanning(true);
+                  sendMessage('📷 攝影機已重新啟動！', 'info');
+                } catch (err) {
+                  sendMessage('重新啟動攝影機失敗', 'error');
                 }
+              }
             }}
             className="bg-blue-600 hover:bg-blue-700 text-white py-2 px-6 rounded-lg"
-            // 當掃描器正在運行時禁用此按鈕
-            disabled={scanning} 
+            disabled={scanning}
           >
             {scanning ? '掃描中...' : '重新啟動掃描'}
           </button>
         )}
       </div>
-
-      {/* 掃描結果顯示 (只有在成功解析出內容時才顯示) */}
       {decodedText && (
         <div className="mt-4 bg-green-50 border border-green-200 p-4 rounded-lg">
           <h3 className="font-semibold text-green-800 mb-2">掃描成功！</h3>
-          <p className="text-green-700 font-mono break-words bg-white p-2 rounded border">
-            {decodedText}
-          </p>
+          <p className="text-green-700 font-mono break-words bg-white p-2 rounded border">{decodedText}</p>
           <p className="text-sm text-green-600 mt-2">正在跳轉至書籍詳情頁面...</p>
         </div>
       )}
-
-      {/* 使用說明 */}
       <div className="mt-4 bg-blue-50 border border-blue-200 p-3 rounded-lg">
         <h4 className="font-semibold text-blue-800 mb-1">使用提示：</h4>
         <ul className="text-sm text-blue-700 space-y-1">
@@ -1828,14 +1722,8 @@ const QuickScanPage = ({ setCurrentPage }) => {
           <li>• 如掃描失敗，請嘗試調整距離</li>
         </ul>
       </div>
-
       <div className="mt-6 text-center">
-        <button
-          onClick={() => setCurrentPage('user_home')}
-          className="bg-gray-500 hover:bg-gray-600 text-white py-2 px-6 rounded-lg"
-        >
-          返回個人主頁
-        </button>
+        <button onClick={() => setCurrentPage('user_home')} className="bg-gray-500 hover:bg-gray-600 text-white py-2 px-6 rounded-lg">返回個人主頁</button>
       </div>
     </div>
   );
@@ -1854,18 +1742,15 @@ const Footer = () => {
   );
 };
 
-// App: 主要應用程式組件
+// App
 function App() {
-  const [currentPage, setCurrentPage] = useState('home'); // 當前頁面
-  const [currentUser, setCurrentUser] = useState({ id: null, username: null }); // 全局使用者狀態
+  const [currentPage, setCurrentPage] = useState('home');
+  const [currentUser, setCurrentUser] = useState({ id: null, username: null });
 
-  // 在應用程式載入時檢查本地儲存中的使用者資訊
   useEffect(() => {
     const userId = localStorage.getItem('user_id');
     const username = localStorage.getItem('username');
-    if (userId && username) {
-      setCurrentUser({ id: userId, username: username });
-    }
+    if (userId && username) setCurrentUser({ id: userId, username: username });
   }, []);
 
   const loginUser = (id, username) => {
@@ -1873,18 +1758,14 @@ function App() {
     localStorage.setItem('user_id', id);
     localStorage.setItem('username', username);
   };
-
   const logoutUser = () => {
     localStorage.removeItem('user_id');
     localStorage.removeItem('username');
     setCurrentUser({ id: null, username: null });
-    // 登出後跳轉回首頁
     setCurrentPage('home');
   };
 
-  // 根據 currentPage 渲染不同的組件
   const renderPage = () => {
-    // 當 currentPage 是一個物件時
     if (typeof currentPage === 'object' && currentPage !== null) {
       switch (currentPage.name) {
         case 'edit_book':
@@ -1892,18 +1773,15 @@ function App() {
             return <BookEdit setCurrentPage={setCurrentPage} bookId={currentPage.params.bookId} />;
           }
           return <Home setCurrentPage={setCurrentPage} />;
-        case 'book_detail': // 處理從 QuickScanPage 跳轉過來的書籍詳情頁面
+        case 'book_detail':
           if (currentPage.params && currentPage.params.identifier) {
             return <BookDetail setCurrentPage={setCurrentPage} identifier={currentPage.params.identifier} />;
           }
-          return <BookList setCurrentPage={setCurrentPage} />; // 如果沒有識別碼，返回書籍列表
+          return <BookList setCurrentPage={setCurrentPage} />;
         default:
-          // 如果物件中的名稱沒有匹配，則回到 home
           return <Home setCurrentPage={setCurrentPage} />;
       }
     }
-
-    // 當 currentPage 是一個字串時 (原有的邏輯)
     switch (currentPage) {
       case 'home':
         return <Home setCurrentPage={setCurrentPage} />;
@@ -1912,29 +1790,20 @@ function App() {
       case 'register':
         return <Register setCurrentPage={setCurrentPage} />;
       case 'user_home':
-        if (currentUser.id) {
-          return <UserHome setCurrentPage={setCurrentPage} />;
-        }
+        if (currentUser.id) return <UserHome setCurrentPage={setCurrentPage} />;
         return <Login setCurrentPage={setCurrentPage} />;
       case 'book_list':
         return <BookList setCurrentPage={setCurrentPage} />;
       case 'book_create':
-        // 只有當使用者名稱是 'yucheng' 時才能訪問
-        if (currentUser.username === 'yucheng') {
-          return <BookCreate setCurrentPage={setCurrentPage} />;
-        }
+        if (currentUser.username === 'yucheng') return <BookCreate setCurrentPage={setCurrentPage} />;
         return <Home setCurrentPage={setCurrentPage} />;
       case 'edit_profile':
-        if (currentUser.id) {
-          return <EditProfile setCurrentPage={setCurrentPage} />;
-        }
+        if (currentUser.id) return <EditProfile setCurrentPage={setCurrentPage} />;
         return <Login setCurrentPage={setCurrentPage} />;
-        case 'quick_scan': // <-- 快速掃描頁面路由
-        if (currentUser.id) { // 只有登入使用者才能使用掃描功能
-          return <QuickScanPage setCurrentPage={setCurrentPage} />;
-        }
+      case 'quick_scan':
+        if (currentUser.id) return <QuickScanPage setCurrentPage={setCurrentPage} />;
         return <Login setCurrentPage={setCurrentPage} />;
-      default: // 預設頁面
+      default:
         return <Home setCurrentPage={setCurrentPage} />;
     }
   };
