@@ -7,7 +7,7 @@ def scan_qr_code_from_webcam():
     使用網路攝影機掃描QR Code，並將其內容解析為JSON格式顯示。
     """
     # 嘗試開啟預設的網路攝影機 (通常是0，如果有多個攝影機可以嘗試1, 2等)
-    cap = cv2.VideoCapture(1)
+    cap = cv2.VideoCapture(0)
 
     # 檢查攝影機是否成功開啟
     if not cap.isOpened():

@@ -5,7 +5,7 @@ services:
     build: 
       context: ./backend  
       dockerfile: Dockerfile
-    command: sh -c "py manage.py migrate && py manage.py runserver 0.0.0.0.8000" 
+    command: sh -c "python manage.py migrate && python manage.py runserver 0.0.0.0.8000" 
     volumes:
       - ./backend:/app #將backend 資料夾映射到app 資料夾內
     ports:
@@ -19,4 +19,4 @@ services:
     volumes:
       - ./frontend:/app 
     ports:
-    - "3000:3000"
+    - "3000:80"
