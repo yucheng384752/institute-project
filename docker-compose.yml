@@ -1,13 +1,10 @@
-version: "3"
 services:
   django_web:
     restart: always
     build: 
       context: ./backend  
       dockerfile: Dockerfile
-    command: sh -c "python manage.py migrate && python manage.py runserver 0.0.0.0.8000" 
-    volumes:
-      - ./backend:/app #將backend 資料夾映射到app 資料夾內
+    command: sh -c "python manage.py migrate && python manage.py runserver 0.0.0.0:8000" 
     ports:
       - "8000:8000" # "內部port:外部port"
   react-app:
@@ -15,8 +12,7 @@ services:
     build: 
       context: ./frontend
       dockerfile: Dockerfile
-    command: "npm start"
-    volumes:
-      - ./frontend:/app 
+    # volumes:
+    #   - ./frontend:/app 
     ports:
     - "3000:80"

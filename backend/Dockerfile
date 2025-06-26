@@ -1,27 +1,26 @@
 # 使用 Python 3.12 的 Alpine Linux 基礎映像
-FROM python:3.12-alpine
+FROM python:3.12-slim
 
 # 設定容器內的工作目錄
 WORKDIR /app
 
 # 複製 requirment.txt 到工作目錄
 # 注意：這裡修正了檔名拼寫錯誤
-COPY requirment.txt .
+COPY requirments.txt .
 
 # 升級 pip
 RUN pip install --upgrade pip
 
-# 安裝構建 opencv-python 所需的依賴和編譯工具
-# build-base 包含 gcc, g++, make 等基礎編譯工具
-# cmake 是 opencv-python 構建所需的
-# libpq-dev 是 PostgreSQL 連接器所需的，如果您未來會用到 PostgreSQL
-# openblas-dev 是 numpy 等科學計算庫常用的優化BLAS庫
-# 這一步會增加映像大小，但對於編譯型函式庫是必要的
-RUN apk add --no-cache build-base cmake libpq-dev openblas-dev
+
+# 安裝 opencv-python 依賴
+RUN apt-get update && \
+    apt-get install -y gcc g++ libgl1 libglib2.0-0 libzbar0 libzbar-dev && \
+    rm -rf /var/lib/apt/lists/*
+
 
 # 安裝 requirment.txt 中列出的 Python 函式庫
 # --no-cache-dir 減少映像檔大小
-RUN pip install --no-cache-dir -r requirment.txt
+RUN pip install --no-cache-dir -r requirments.txt
 
 # 複製所有專案程式碼到容器內的工作目錄
 COPY . .

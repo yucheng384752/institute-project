@@ -18,9 +18,7 @@ FROM nginx:alpine
 # 從 build 階段複製 React 應用建置後的靜態檔案到 Nginx 的預設網頁根目錄
 # /app/build 是 npm run build 預設生成的靜態檔案目錄
 COPY --from=build /app/build /usr/share/nginx/html
-
 # 複製你的自定義 Nginx 配置檔案
-# 假設你的 nginx.conf 放在 frontend 資料夾內
 COPY ./nginx.conf /etc/nginx/conf.d/default.conf
 
 # 暴露 80 端口，因為 Nginx 監聽 80 端口
