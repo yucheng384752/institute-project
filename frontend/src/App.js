@@ -548,33 +548,29 @@ const BookList = ({ setCurrentPage }) => {
         return;
     }
 
-    try {
-      const response = await fetch(`/api/books/borrow/${bookId}/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ user_id: currentUser.id }),
-      });
-      const data = await response.json();
-
-      if (response.ok) {
-        sendMessage(data.message, 'success');
-        // 刷新列表以顯示借閱狀態
-        if (messageTimeoutRef.current) {
-          clearTimeout(messageTimeoutRef.current);
-        }
-        messageTimeoutRef.current = setTimeout(() => {
-          fetchBooks();
-        }, 1500); // 1.5 秒後刷新
-      } else {
+     try {
+    const response = await fetch(`/api/books/borrow/${books.id}/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: currentUser.id }),
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      try {
+        const data = JSON.parse(text);
         sendMessage(data.message || '借閱失敗', 'error');
+      } catch {
+        sendMessage('借閱失敗（伺服器錯誤）', 'error');
       }
-    } catch (error) {
-      sendMessage('網路錯誤或伺服器無響應', 'error');
-      console.error('借閱請求失敗:', error);
+      return;
     }
-  };
+    const data = await response.json();
+    sendMessage('借閱成功', 'success');
+    setBooks(prevBook => ({ ...prevBook, status: 'BORROWED', is_borrowed: true }));
+    } catch (error) {
+      sendMessage('網路或伺服器錯誤', 'error');
+    }
+};
 
   const handleDeleteBook = async (bookId, bookTitle) => {
     setMessage(null);
@@ -1332,10 +1328,8 @@ const EditProfile = ({ setCurrentPage }) => {
   );
 };
 
-// ===========================================
 // 新增組件: BookDetail (書籍詳細資訊頁面)
 // 用於顯示單本書籍的詳細資訊，可從掃描頁面跳轉過來
-// ===========================================
 const BookDetail = ({ setCurrentPage, identifier }) => {
   const { currentUser } = useContext(AuthContext);
   const [book, setBook] = useState(null);
@@ -1366,6 +1360,7 @@ const BookDetail = ({ setCurrentPage, identifier }) => {
       try {
         const response = await fetch(`/api/books/${identifier}/`);
         const data = await response.json();
+        console.log('BookDetail fetch:', identifier, data.book); // ← 加這行
         if (response.ok) {
           setBook(data.book);
           sendMessage('成功載入書籍資訊', 'success');
@@ -1466,7 +1461,10 @@ const BookDetail = ({ setCurrentPage, identifier }) => {
           <h2 className="text-2xl font-bold text-red-600 mb-4">書籍不存在</h2>
           <MessageDisplay message={message} type={messageType} />
           <button
-            onClick={() => setCurrentPage('quick_scan')}
+            onClick={() => {setMessage('');
+                setMessageType('');
+                setTimeout(() => setCurrentPage('quick_scan'), 0);
+            }}
             className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg transition duration-300"
           >
             返回掃描頁面
@@ -1525,7 +1523,11 @@ const BookDetail = ({ setCurrentPage, identifier }) => {
             返回掃描頁面
           </button>
           <button
-            onClick={() => setCurrentPage('book_list')}
+            onClick={() => {
+                setMessage('');
+                setMessageType('');
+                setTimeout(() => setCurrentPage('book_list'), 0);
+            }}
             className="ml-4 bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition duration-300"
           >
             返回書籍列表
@@ -1558,7 +1560,7 @@ const QuickScanPage = ({ setCurrentPage }) => {
       .then(devices => {
         setCameras(devices);
         if (devices && devices.length > 0) {
-          setCameraId(devices[0].id); // 預設第一個
+          setCameraId(devices[0].id);
         } else {
           setCameraId(null);
         }
@@ -1591,38 +1593,49 @@ const QuickScanPage = ({ setCurrentPage }) => {
 
   // 停止並清理掃描器
   const stopScanner = useCallback(async () => {
-  if (html5QrcodeRef.current) {
-    try {
+  try {
+    if (html5QrcodeRef.current) {
       if (scanning) {
         await html5QrcodeRef.current.stop();
       }
-    } catch (err) {}
-    // 僅當 DOM 還存在且有子節點才呼叫 clear
-    const scannerElem = document.getElementById(scannerId);
-    if (
-      scannerElem &&
-      scannerElem.children.length > 0
-    ) {
-      try {
+      const scannerElem = document.getElementById(scannerId);
+      if (scannerElem && scannerElem.children.length > 0) {
         await html5QrcodeRef.current.clear();
-      } catch (err) {}
+      }
+      await html5QrcodeRef.current.clear();
+      html5QrcodeRef.current = null;
+      setScanning(false);
+      setQrDetected(false);
+      setDecodedText('');
     }
-    html5QrcodeRef.current = null;
-    setScanning(false);
-    setQrDetected(false);
-    setDecodedText('');
-  }
-}, [scanning]); 
+    } catch (err) {
+      console.error('stopScanner error:', err);
+    }
+    }, [scanning]);
 
-  // 掃描成功
-  const onScanSuccess = useCallback(async (decodedResult) => {
-    setDecodedText(decodedResult);
-    sendMessage(`🎉 掃描成功！ISBN: ${decodedResult}`, 'success');
+    // 掃描成功
+    const onScanSuccess = useCallback(async (decodedResult) => {
+    const cleanResult = decodedResult.trim();
+    setDecodedText(cleanResult);
+    sendMessage(`🎉 掃描成功！ISBN: ${cleanResult}`, 'success');
     setQrDetected(true);
     triggerScanAnimation();
     await stopScanner();
-    setCurrentPage({ name: 'book_detail', params: { identifier: decodedResult } });
+    setDecodedText('');
+    // 先查詢書籍 id
+    try {
+      const res = await fetch(`/api/books/isbn/${cleanResult}/`);
+      const data = await res.json();
+      if (res.ok && data.book && data.book.id) {
+        setCurrentPage({ name: 'book_detail', params: { identifier: data.book.id } });
+      } else {
+        sendMessage('查無此書籍', 'error');
+      }
+    } catch {
+      sendMessage('查詢書籍失敗', 'error');
+    }
   }, [sendMessage, setCurrentPage, stopScanner, triggerScanAnimation]);
+
 
   // 掃描錯誤
   const onScanError = useCallback((errorMessage) => {
@@ -1635,55 +1648,70 @@ const QuickScanPage = ({ setCurrentPage }) => {
     setQrDetected(false);
   }, [sendMessage, qrDetected]);
 
-  // 切換攝影機時自動停止舊掃描
+  // 切換攝影機時自動停止舊掃描並啟動新掃描
   useEffect(() => {
-    stopScanner();
+    if (cameraId) {
+      (async () => {
+        await stopScanner();
+        await handleStartScan();
+      })();
+    }
     // eslint-disable-next-line
   }, [cameraId]);
 
   // 卸載時釋放資源
-  useEffect(() => {
-  // 僅在組件卸載時清理
+ useEffect(() => {
+  // 每次進入掃描頁都重設狀態
+  setCameraId(null);
+  setScanning(false);
+  setQrDetected(false);
+  setDecodedText('');
+  setMessage('');
+  setMessageType('');
+  Html5Qrcode.getCameras()
+    .then(devices => {
+      setCameras(devices);
+      if (devices && devices.length > 0) {
+        setCameraId(devices[0].id); // 預設第一個
+      }
+    })
+    .catch(() => setCameraId(null));
+  // 清理掃描器
   return () => {
-    (async () => {
-      await stopScanner();
-      if (messageTimeoutRef.current) clearTimeout(messageTimeoutRef.current);
-    })();
-  };
+    stopScanner().catch(console.error);  };
   // eslint-disable-next-line
-}, []);
-
+  }, []);
+  
   // 啟動掃描器
-const handleStartScan = useCallback(async () => {
-  if (!cameraId) {
-    sendMessage('請選擇攝影機', 'error');
-    return;
-  }
-  const scannerElem = document.getElementById(scannerId);
-  if (!scannerElem) {
-    sendMessage('掃描器容器不存在，請重新整理頁面', 'error');
-    return;
-  }
-  // 不要再用 innerHTML = ''
-  if (html5QrcodeRef.current) {
-    try { await html5QrcodeRef.current.clear(); } catch (e) {}
-    html5QrcodeRef.current = null;
-  }
-  html5QrcodeRef.current = new Html5Qrcode(scannerId);
-  try {
-    await html5QrcodeRef.current.start(
-      { deviceId: { exact: cameraId } },
-      { qrbox: { width: 250, height: 250 }, fps: 10, disableFlip: false },
-      onScanSuccess,
-      onScanError
-    );
-    setScanning(true);
-    sendMessage('📷 攝影機已啟動！', 'info');
-  } catch (err) {
-    sendMessage('啟動攝影機失敗，請檢查權限或裝置', 'error');
-    setScanning(false);
-  }
-}, [cameraId, onScanSuccess, onScanError, sendMessage]);
+ const handleStartScan = useCallback(async () => {
+    if (!cameraId) {
+      sendMessage('請選擇攝影機', 'error');
+      return;
+    }
+    const scannerElem = document.getElementById(scannerId);
+    if (!scannerElem) {
+      sendMessage('掃描器容器不存在，請重新整理頁面', 'error');
+      return;
+    }
+    if (html5QrcodeRef.current) {
+      try { await html5QrcodeRef.current.clear(); } catch (e) {}
+      html5QrcodeRef.current = null;
+    }
+    html5QrcodeRef.current = new Html5Qrcode(scannerId);
+    try {
+      await html5QrcodeRef.current.start(
+        { deviceId: { exact: cameraId } },
+        { qrbox: { width: 250, height: 250 }, fps: 10, disableFlip: false },
+        onScanSuccess,
+        onScanError
+      );
+      setScanning(true);
+      sendMessage('', ''); // 啟動成功時清除訊息
+    } catch (err) {
+      sendMessage('啟動攝影機失敗，請檢查權限或裝置', 'error');
+      setScanning(false);
+    }
+  }, [cameraId, onScanSuccess, onScanError, sendMessage]);
 
 
   if (!currentUser?.id) return null;
@@ -1707,17 +1735,25 @@ const handleStartScan = useCallback(async () => {
           ))}
         </select>
       </div>
-      <div id={scannerId} className="w-full h-[300px] border-2 border-gray-300 rounded-lg overflow-hidden bg-gray-200 flex justify-center items-center relative">
-  {scanning && (
-    <div className={`absolute w-3/4 h-3/4 border-4 ${qrDetected ? 'border-green-500 animate-pulse' : 'border-gray-400'} rounded-lg z-10 pointer-events-none transition-colors duration-200`} />
-  )}
-  {!scanning && (
-    <div className="text-center z-0">
-      <p className="text-gray-500 text-lg mb-2">攝影機準備中...</p>
-      <p className="text-gray-400 text-sm">請確保光線充足並將 QR Code 置於框內</p>
-    </div>
-  )}
-</div>
+      <div className="relative w-full h-[300px]">
+        <div
+          id={scannerId}
+          className="w-full h-full border-2 border-gray-300 rounded-lg overflow-hidden bg-gray-200"
+            // 不要放任何 React 內容
+          />
+          {/* 掃描框動畫用絕對定位覆蓋 */}
+          {scanning && (
+          <div className={`absolute left-1/2 top-1/2 w-3/4 h-3/4 border-4 ${qrDetected ? 'border-green-500 animate-pulse' : 'border-gray-400'} rounded-lg z-10 pointer-events-none transition-colors duration-200`}
+            style={{ transform: 'translate(-50%, -50%)' }}
+          />
+        )}
+        {!scanning && (
+          <div className="text-center z-0">
+            <p className="text-gray-500 text-lg mb-2">攝影機準備中...</p>
+            <p className="text-gray-400 text-sm">請確保光線充足並將 QR Code 置於框內</p>
+          </div>
+        )}
+      </div>
       <div className="flex justify-center gap-4 mt-4">
         {scanning ? (
           <button onClick={stopScanner} className="bg-red-600 hover:bg-red-700 text-white py-2 px-6 rounded-lg">停止掃描</button>

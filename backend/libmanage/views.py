@@ -413,6 +413,23 @@ def return_book_by_book_and_user_api(request): # 新增：根據書籍ID和用�
     except Exception as e:
         return error_response(f'歸還書籍失敗：{str(e)}', status=500)
 
+@require_http_methods(["GET"])
+def get_book_by_isbn(request, isbn):
+    try:
+        book = Book.objects.get(isbn=isbn)
+        return JsonResponse({'book': {
+            'id': book.id,
+            'title': book.title,
+            'author': book.author,
+            'isbn': book.isbn,
+            'category': book.category,
+            'status': book.status,
+            # ...其他欄位...
+        }})
+    except Book.DoesNotExist:
+        return JsonResponse({'message': '查無此書籍'}, status=404)
+    except Exception as e:
+        return JsonResponse({'message': f'伺服器錯誤: {str(e)}'}, status=500)
 # @csrf_exempt
 # @require_http_methods(["POST"]) 
 # def scan_code_api(request):

@@ -42,6 +42,7 @@ urlpatterns = [
     # path('api/scan_code/', views.scan_code_api, name='api_scan_code'), 
     path('api/user/update_profile/', views.update_profile_api, name='api_update_profile'), 
     path('api/books/return_by_book_and_user/', views.return_book_by_book_and_user_api, name='api_return_book_by_book_and_user'),
+    path('api/books/isbn/<str:isbn>/', views.get_book_by_isbn),
 
     # === 服務 React 應用的入口點 (index.html) ===
     re_path(r'^(?:.*)/?$', TemplateView.as_view(template_name='index.html')),
